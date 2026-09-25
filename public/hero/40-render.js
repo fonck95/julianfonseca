@@ -42,7 +42,12 @@
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.S = Math.min(this.W / 104, this.H2 / 46);
     this.OX = (this.W - 100 * this.S) / 2;
-    this.GY = this.H2 - 7 * this.S;
+    // En móvil el HUD fijo tapa el borde inferior del canvas: sube el suelo
+    // por encima de él o el ave (que vive junto al suelo) nunca se ve.
+    var hud = document.getElementById('hud');
+    var hudH = (this.cfg.light && hud) ? hud.getBoundingClientRect().height : 0;
+    this.GY = this.H2 - 7 * this.S - hudH - (hudH ? 16 : 0);
+    if (this.GY < this.H2 * 0.5) this.GY = this.H2 * 0.5;
   };
 
   Renderer.prototype.wx = function (x) { return this.OX + x * this.S; };
@@ -100,7 +105,10 @@
   };
 
   Renderer.prototype.drawWorld = function (ev, tgt, now, trail) {
-    var ctx = this.ctx, b = ev.bird, s = this.S;
+    var ctx = this.ctx, b = ev.bird;
+    // el ave se dibuja con su propia escala: en móvil (light) ×1.8 y nunca
+    // por debajo de 9 px, o es una mancha invisible sobre el fondo liso
+    var s = Math.max(9, this.S * (this.cfg.light ? 1.8 : 1));
     var st = H.STAGES[ev.stage];
 
     // suelo
