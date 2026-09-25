@@ -10,7 +10,7 @@ import {
 // ---------------------------------------------------------------------------
 interface HudView {
   stage: number; mastered: boolean[]; best: number; err: number;
-  evals: number; history: number[]; grounded: boolean;
+  evals: number; history: number[];
 }
 
 function bootHud(reset: () => void) {
@@ -52,8 +52,9 @@ function bootHud(reset: () => void) {
           : `domina ${st.label} · pasando a la siguiente etapa`;
 
     // línea de meta de la etapa actual
-    goalEl.setAttribute('y1', String(45 - Math.min(st.goal, 1) * 43));
-    goalEl.setAttribute('y2', String(45 - Math.min(st.goal, 1) * 43));
+    const gy = 45 - Math.min(st.goal, 1) * 43;
+    goalEl.setAttribute('y1', gy.toFixed(1));
+    goalEl.setAttribute('y2', gy.toFixed(1));
 
     const n = Math.min(v.history.length, 140);
     if (n > 1) {
@@ -79,7 +80,10 @@ function boot(canvas: HTMLCanvasElement) {
   let idleSince = performance.now();
   const smooth = { mx: 0.5, my: 0.5 };
   let err = 0;
-  let budget = 22; // simulaciones de 5 s por frame: suficiente y no traba el render
+  // Ritmo de aprendizaje: 2 simulaciones de 5 s por frame (~120/s). Así cada
+  // etapa se ve madurar en varios segundos — caminar, luego saltar, luego
+  // volar — en vez de resolverse en un parpadeo.
+  const BUDGET = 2;
 
   const onMove = (e: PointerEvent) => {
     const r = canvas.getBoundingClientRect();
@@ -95,10 +99,8 @@ function boot(canvas: HTMLCanvasElement) {
   });
 
   const reset = () => {
-    const fresh = createEvolver();
-    Object.assign(evolver, fresh);
+    Object.assign(evolver, createEvolver());
     resetCreature(creature);
-    budget = 22;
   };
   const hud = bootHud(reset);
 
@@ -115,36 +117,31 @@ function boot(canvas: HTMLCanvasElement) {
   ];
   const toWorld = (sx: number, sy: number): [number, number] => [
     sx * WORLD.w,
-    Math.max(0, (sy - 0.16) / 0.62 * WORLD.h),
+    Math.max(0, ((sy - 0.16) / 0.62) * WORLD.h),
   ];
 
   const tick = (t: number) => {
     if (pointer.active && performance.now() - idleSince > 4000) pointer.active = false;
 
     // 1) entrenar (CPU): unas cuantas variantes del campeón por frame
-    evolveStep(evolver, budget);
+    evolveStep(evolver, BUDGET);
 
     // 2) objetivo de la criatura visible: el cursor si lo hay; si no, el fantasma
-    let tx: number, ty: number;
-    if (pointer.active) {
-      [tx, ty] = toWorld(pointer.x, pointer.y);
-    } else {
-      [tx, ty] = stageTarget(evolver, t);
-    }
+    const ghost = stageTarget(evolver, t);
+    const [tx, ty] = pointer.active ? toWorld(pointer.x, pointer.y) : ghost;
 
     // 3) animar la criatura con el cerebro campeón
     err = stepCreature(creature, evolver.champ, tx, ty);
 
     // 4) el puntero «suave» es solo para el campo de fondo
-    const gx = pointer.active ? pointer.x : stageTarget(evolver, t)[0] / WORLD.w;
-    const gy = pointer.active ? pointer.y : 0.16 + (stageTarget(evolver, t)[1] / WORLD.h) * 0.62;
+    const gx = pointer.active ? pointer.x : ghost[0] / WORLD.w;
+    const gy = pointer.active ? pointer.y : 0.16 + (ghost[1] / WORLD.h) * 0.62;
     smooth.mx += (gx - smooth.mx) * 0.06;
     smooth.my += (gy - smooth.my) * 0.06;
 
     hud({
       stage: evolver.stage, mastered: evolver.mastered, best: evolver.best,
       err, evals: evolver.evals, history: evolver.history,
-      grounded: creature.pose.grounded,
     });
   };
 
@@ -288,7 +285,7 @@ function boot(canvas: HTMLCanvasElement) {
       const conv = Math.min(1, evolver.best / st.goal);
       if (conv < 1) {
         const gyPix = (1 - 0.16) * H;
-        c2.strokeStyle = `rgba(120, 160, 220, ${0.10 * (1 - conv)})`;
+        c2.strokeStyle = `rgba(120, 160, 220, ${0.1 * (1 - conv)})`;
         c2.lineWidth = 1;
         c2.beginPath(); c2.moveTo(0, gyPix); c2.lineTo(W, gyPix); c2.stroke();
       }
@@ -336,7 +333,7 @@ function boot(canvas: HTMLCanvasElement) {
 
       // halo
       const halo = c2.createRadialGradient(ax, ay, 0, ax, ay, S * 2.4);
-      halo.addColorStop(0, `hsla(${learnHue}, 95%, 68%, ${0.20 + 0.15 * (1 - conv)})`);
+      halo.addColorStop(0, `hsla(${learnHue}, 95%, 68%, ${0.2 + 0.15 * (1 - conv)})`);
       halo.addColorStop(1, 'transparent');
       c2.fillStyle = halo;
       c2.beginPath(); c2.arc(ax, ay, S * 2.4, 0, Math.PI * 2); c2.fill();
