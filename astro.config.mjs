@@ -4,9 +4,23 @@ import { defineConfig } from 'astro/config';
 // en GitHub Pages vive bajo /julianfonseca.
 const onRailway = !!process.env.RAILWAY_ENVIRONMENT;
 
+// `site` solo se declara si es una URL válida: Astro falla el build con
+// "Invalid url" si no lo es, y en Railway RAILWAY_STATIC_URL puede venir
+// sin esquema. Ningún componente usa Astro.site, así que omitirla es seguro.
+function safeSite(candidate) {
+  if (!candidate) return undefined;
+  try {
+    return new URL(candidate).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+const site = onRailway
+  ? safeSite(process.env.RAILWAY_STATIC_URL)
+  : 'https://fonck95.github.io/';
+
 export default defineConfig({
   base: onRailway ? '/' : '/julianfonseca',
-  site: onRailway
-    ? (process.env.RAILWAY_STATIC_URL || 'https://example.up.railway.app')
-    : 'https://fonck95.github.io',
+  ...(site ? { site } : {}),
 });
