@@ -1,17 +1,27 @@
 ---
-// Hero: campo neuronal WebGPU (WGSL) + agente que APRENDE a seguir el cursor.
-// La red neuronal corre en CPU (src/lib/agent.ts) y se renderiza en la GPU.
+// Hero: campo neuronal WebGPU (WGSL) + criatura que evoluciona por etapas:
+// primero aprende a caminar, luego a saltar, luego a volar tras el cursor.
+// Neuroevolución real en CPU (src/lib/creature.ts), render en GPU (src/lib/shader.ts).
 ---
 <canvas id="neural" aria-hidden="true"></canvas>
 
 <div class="hud" id="hud" role="status" aria-live="off">
   <div class="hud-head">
     <span class="hud-dot" id="hud-dot"></span>
-    <span class="hud-title">Aprendizaje en vivo</span>
+    <span class="hud-title">Evolución en vivo</span>
     <span class="hud-loc">CPU → GPU</span>
   </div>
+
+  <ol class="hud-stages" id="hud-stages">
+    <li data-stage="0"><span class="st-dot"></span> caminar</li>
+    <li data-stage="1"><span class="st-dot"></span> saltar</li>
+    <li data-stage="2"><span class="st-dot"></span> volar</li>
+  </ol>
+
   <svg class="hud-graph" id="hud-graph" viewBox="0 0 160 46" preserveAspectRatio="none" aria-hidden="true">
     <line x1="0" y1="45" x2="160" y2="45" stroke="rgba(255,255,255,.12)" stroke-width="0.6" />
+    <line id="hud-goal" x1="0" y1="10" x2="160" y2="10" stroke="rgba(255,199,89,.35)" stroke-width="0.5"
+      stroke-dasharray="3 4" />
     <polyline id="hud-curve" fill="none" stroke="url(#gHud)" stroke-width="1.4"
       stroke-linejoin="round" stroke-linecap="round" points="" />
     <defs>
@@ -21,13 +31,14 @@
       </linearGradient>
     </defs>
   </svg>
+
   <dl class="hud-rows">
-    <div><dt>error</dt><dd id="hud-err">—</dd></div>
-    <div><dt>pérdida</dt><dd id="hud-loss">—</dd></div>
-    <div><dt>backprop</dt><dd id="hud-steps">0</dd></div>
+    <div><dt>aptitud</dt><dd id="hud-fit">—</dd></div>
+    <div><dt>distancia</dt><dd id="hud-err">—</dd></div>
+    <div><dt>simulaciones</dt><dd id="hud-steps">0</dd></div>
   </dl>
-  <p class="hud-msg" id="hud-msg">explorando…</p>
-  <button class="hud-reset" id="hud-reset" type="button">Reiniciar aprendizaje</button>
+  <p class="hud-msg" id="hud-msg">cerebro al azar: la criatura ni se mueve…</p>
+  <button class="hud-reset" id="hud-reset" type="button">Reiniciar desde cero</button>
 </div>
 
 <style>
@@ -35,7 +46,7 @@
 
   .hud {
     position: absolute; z-index: 3; right: 28px; bottom: 28px;
-    width: 232px; padding: 14px 15px 13px;
+    width: 240px; padding: 14px 15px 13px;
     border: 1px solid var(--line); border-radius: 14px;
     background: linear-gradient(180deg, rgba(11, 15, 28, 0.78), rgba(8, 11, 21, 0.86));
     backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -59,6 +70,34 @@
     color: var(--muted); border: 1px solid var(--line);
     padding: 2px 6px; border-radius: 999px;
   }
+
+  .hud-stages {
+    list-style: none; margin: 0 0 10px; padding: 0;
+    display: flex; gap: 6px;
+  }
+  .hud-stages li {
+    flex: 1; display: flex; align-items: center; gap: 5px;
+    font-size: 0.58rem; letter-spacing: 0.05em; text-transform: lowercase;
+    color: rgba(148, 160, 185, 0.55);
+    border: 1px solid transparent; border-radius: 7px; padding: 4px 6px;
+    transition: color 0.4s, border-color 0.4s, background 0.4s;
+  }
+  .st-dot {
+    width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+    background: rgba(148, 160, 185, 0.35);
+    transition: background 0.4s, box-shadow 0.4s;
+  }
+  .hud-stages li.done { color: var(--muted); }
+  .hud-stages li.done .st-dot { background: var(--cyan); }
+  .hud-stages li.now {
+    color: var(--text); border-color: rgba(255, 199, 89, 0.4);
+    background: rgba(255, 199, 89, 0.06);
+  }
+  .hud-stages li.now .st-dot {
+    background: var(--gold); box-shadow: 0 0 8px var(--gold);
+    animation: hudPulse 1.2s ease-in-out infinite;
+  }
+
   .hud-graph { width: 100%; height: 46px; display: block; margin-bottom: 10px; }
   .hud-rows { display: grid; gap: 5px; margin: 0; }
   .hud-rows > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
@@ -90,390 +129,4 @@
   }
 </style>
 
-<script>
-  import { createAgent, updateAgent, resetAgent, ghostTarget } from '../lib/agent';
-
-  const WGSL = /* wgsl */ `
-    struct Uniforms {
-      res: vec2f, time: f32, mouse: vec2f,
-      agent: vec2f, goal: vec2f, energy: f32, conv: f32,
-    };
-    @group(0) @binding(0) var<uniform> u: Uniforms;
-
-    fn hash21(p: vec2f) -> f32 {
-      var q = fract(p * vec2f(123.34, 456.21));
-      q += dot(q, q + 45.32);
-      return fract(q.x * q.y);
-    }
-
-    fn nodeLayer(uv: vec2f, cells: f32, t: f32, seed: f32) -> vec3f {
-      let g = uv * cells;
-      let cell = floor(g);
-      let f = fract(g);
-      var col = vec3f(0.0);
-      for (var dy = -1.0; dy <= 1.0; dy = dy + 1.0) {
-        for (var dx = -1.0; dx <= 1.0; dx = dx + 1.0) {
-          let o = vec2f(dx, dy);
-          let id = cell + o;
-          let rnd = hash21(id + seed);
-          if (rnd < 0.55) { continue; }
-          let breathe = sin(t * (0.6 + rnd) + rnd * 20.0) * 0.5 + 0.5;
-          let pos = o + vec2f(hash21(id + 7.7 + seed), hash21(id + 3.3 + seed)) * 0.8 + 0.1;
-          let d = length(f - pos);
-          let glow = (0.012 + 0.01 * breathe) / (d * d + 0.0015);
-          let pink = vec3f(1.0, 0.36, 0.45);
-          let cyan = vec3f(0.35, 0.84, 1.0);
-          let c = mix(cyan, pink, hash21(id * 1.7 + seed));
-          col += c * glow * 0.0025 * (0.55 + 0.75 * breathe);
-        }
-      }
-      return col;
-    }
-
-    @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
-      var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
-      return vec4f(p[i], 0.0, 1.0);
-    }
-
-    @fragment fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
-      let uv = frag.xy / u.res;
-      let asp = u.res.x / u.res.y;
-      var p = vec2f(uv.x * asp, uv.y);
-      let t = u.time;
-      let m = vec2f(u.mouse.x * asp, u.mouse.y);
-      let ag = vec2f(u.agent.x * asp, u.agent.y);
-      let gl = vec2f(u.goal.x * asp, u.goal.y);
-
-      // fondo: niebla profunda con domain warp lento
-      var q = p * 1.6;
-      q += 0.25 * vec2f(sin(q.y * 2.1 + t * 0.17), cos(q.x * 1.9 - t * 0.13));
-      let fog = 0.5 + 0.5 * sin(q.x * 1.7 + sin(q.y * 2.3 + t * 0.11) * 1.4);
-      var col = mix(vec3f(0.024, 0.031, 0.06), vec3f(0.05, 0.07, 0.14), fog * 0.85);
-
-      // capas de nodos a distintas escalas
-      col += nodeLayer(p, 6.0, t, 0.0) * 1.0;
-      col += nodeLayer(p, 11.0, t * 1.1, 40.0) * 0.55;
-      col += nodeLayer(p, 19.0, t * 0.9, 90.0) * 0.3;
-
-      // sinapsis del campo: despiertan cerca del puntero
-      let dm = length(p - m);
-      let pull = exp(-dm * 3.2);
-      let threads = sin(p.x * 42.0 + t * 2.0) * sin(p.y * 42.0 - t * 1.7);
-      col += vec3f(1.0, 0.45, 0.55) * smoothstep(0.75, 1.0, threads) * pull * 0.35;
-      col += vec3f(0.4, 0.8, 1.0) * pull * 0.12;
-      col += vec3f(1.0, 0.42, 0.52) * (0.004 / (dm * dm + 0.02)) * 0.05;
-
-      // --- el agente que aprende ---
-      let dag = length(p - ag);
-
-      // halo de «esfuerzo»: rosa y turbulento mientras la red corrige;
-      // se aquieta y pasa a cian cuando converge
-      let wob = sin(p.x * 60.0 + t * 5.0) * sin(p.y * 55.0 - t * 4.3);
-      let e = u.energy;
-      let learnCol = mix(vec3f(0.35, 0.85, 1.0), vec3f(1.0, 0.36, 0.45), clamp(e, 0.0, 1.0));
-      let haloR = 0.05 + 0.045 * e;
-      let halo = exp(-dag / max(haloR, 0.001));
-      col += learnCol * halo * (0.10 + 0.16 * e) * (1.0 + wob * 0.35 * e);
-
-      // núcleo del agente: blanco con borde del color de aprendizaje
-      let core = 0.0022 / (dag * dag + 0.00035);
-      col += vec3f(1.0, 0.98, 0.97) * core * 0.045;
-      let ring = abs(dag - 0.017 - 0.006 * e);
-      col += learnCol * smoothstep(0.006, 0.0, ring) * (0.5 + 0.4 * e);
-
-      // anillo del objetivo: respira; se cierra y se aquieta cuando el error cae
-      let dgl = length(p - gl);
-      let conv = u.conv;
-      let rr = mix(0.055, 0.02, conv) + 0.006 * sin(t * 3.0) * (1.0 - conv);
-      let ringG = abs(dgl - rr);
-      col += vec3f(1.0, 0.78, 0.35) * smoothstep(0.004, 0.0, ringG) * (0.55 - 0.3 * conv);
-      let crossG = min(abs(p.x - gl.x), abs(p.y - gl.y));
-      let inBox = step(abs(p.x - gl.x) / asp, 0.012) * step(abs(p.y - gl.y), 0.012);
-      col += vec3f(1.0, 0.78, 0.35) * smoothstep(0.0025, 0.0, crossG) * inBox * 0.5 * (1.0 - conv);
-
-      // línea de error: une agente y objetivo; se apaga al converger
-      let seg = gl - ag;
-      let segL = max(length(seg), 1e-4);
-      let dir = seg / segL;
-      let rel = p - ag;
-      let proj = clamp(dot(rel, dir), 0.0, segL);
-      let perp = length(rel - dir * proj);
-      let dash = 0.5 + 0.5 * sin(proj * 90.0 - t * 6.0);
-      let link = smoothstep(0.0035, 0.0, perp) * dash;
-      let errCol = mix(vec3f(0.35, 0.85, 1.0), vec3f(1.0, 0.45, 0.5), 1.0 - conv);
-      col += errCol * link * (0.16 + 0.5 * (1.0 - conv));
-
-      // grano y viñeta
-      let grain = (hash21(uv * u.res + fract(t)) - 0.5) * 0.03;
-      col += grain;
-      let vig = 1.0 - 0.45 * length((uv - 0.5) * vec2f(1.15, 1.0));
-      col *= vig;
-
-      return vec4f(col, 1.0);
-    }
-  `;
-
-  // ---------------------------------------------------------------------------
-  // HUD: telemetría del aprendizaje, compartida por WebGPU y por el fallback 2D
-  // ---------------------------------------------------------------------------
-  interface AgentView {
-    px: number; py: number; gx: number; gy: number;
-    err: number; loss: number; trained: number; energy: number;
-    history: Float32Array; historyLen: number;
-    trail: Float32Array; trailLen: number;
-  }
-
-  function bootHud(reset: () => void) {
-    const errEl = document.getElementById('hud-err');
-    const lossEl = document.getElementById('hud-loss');
-    const stepsEl = document.getElementById('hud-steps');
-    const msgEl = document.getElementById('hud-msg');
-    const curveEl = document.getElementById('hud-curve');
-    const dotEl = document.getElementById('hud-dot');
-    const resetBtn = document.getElementById('hud-reset');
-    if (!errEl || !lossEl || !stepsEl || !msgEl || !curveEl || !dotEl) return () => {};
-    resetBtn?.addEventListener('click', () => reset());
-
-    let last = 0;
-    return (a: AgentView) => {
-      const now = performance.now();
-      if (now - last < 90) return; // ~11 Hz: legible y barato
-      last = now;
-      errEl.textContent = a.err.toFixed(3);
-      lossEl.textContent = a.loss.toFixed(4);
-      stepsEl.textContent = a.trained.toLocaleString('es');
-      const conv = a.err < 0.05 && a.energy < 0.35;
-      dotEl.classList.toggle('converged', conv);
-      msgEl.textContent = conv
-        ? 'convergido · la red ya anticipa el cursor; muévelo rápido para verla readaptarse'
-        : a.trained < 120
-          ? 'explorando el espacio: los pesos aún son ruido'
-          : a.err > 0.35
-            ? 'persiguiendo: overshoot y corrección, error alto'
-            : 'refinando: el error cae en cada paso de backprop';
-      // curva: historia de error, más viejo a la izquierda
-      const n = Math.min(a.historyLen, 140);
-      if (n > 1) {
-        const start = (a.historyLen - n + 140) % 140;
-        let pts = '';
-        for (let i = 0; i < n; i++) {
-          const v = a.history[(start + i) % 140];
-          const x = (i / (n - 1)) * 160;
-          const y = 45 - Math.min(v, 1) * 43;
-          pts += `${x.toFixed(1)},${y.toFixed(1)} `;
-        }
-        curveEl.setAttribute('points', pts.trim());
-      }
-    };
-  }
-
-  function boot(canvas: HTMLCanvasElement) {
-    const agent = createAgent();
-    const pointer = { x: 0.5, y: 0.5, active: false };
-    let idleSince = performance.now();
-    const smooth = { mx: 0.5, my: 0.5 };
-
-    const onMove = (e: PointerEvent) => {
-      const r = canvas.getBoundingClientRect();
-      pointer.x = (e.clientX - r.left) / r.width;
-      pointer.y = 1 - (e.clientY - r.top) / r.height;
-      pointer.active = true;
-      idleSince = performance.now();
-    };
-    const onLeave = () => { pointer.active = false; };
-    window.addEventListener('pointermove', onMove, { passive: true });
-    document.addEventListener('pointerleave', onLeave);
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) idleSince = performance.now();
-    });
-
-    const hud = bootHud(() => resetAgent(agent));
-
-    const fit = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.round(canvas.clientWidth * dpr);
-      canvas.height = Math.round(canvas.clientHeight * dpr);
-    };
-
-    // un tick del mundo, compartido por ambos renderizadores
-    const tick = (t: number) => {
-      if (pointer.active && performance.now() - idleSince > 4000) pointer.active = false;
-      updateAgent(agent, t, pointer);
-      // el puntero «suave» es solo para el campo de fondo
-      const gx = pointer.active ? pointer.x : ghostTarget(t)[0];
-      const gy = pointer.active ? pointer.y : ghostTarget(t)[1];
-      smooth.mx += (gx - smooth.mx) * 0.06;
-      smooth.my += (gy - smooth.my) * 0.06;
-      hud(agent);
-    };
-
-    async function initWebGPU(): Promise<boolean> {
-      if (!('gpu' in navigator)) return false;
-      try {
-        const nav = navigator as any;
-        const adapter = await nav.gpu.requestAdapter();
-        if (!adapter) return false;
-        const device = await adapter.requestDevice();
-        const ctx = canvas.getContext('webgpu') as any;
-        if (!ctx) return false;
-        const format = nav.gpu.getPreferredCanvasFormat();
-        fit();
-        ctx.configure({ device, format, alphaMode: 'opaque' });
-
-        const module = device.createShaderModule({ code: WGSL });
-        const pipeline = device.createRenderPipeline({
-          layout: 'auto',
-          vertex: { module },
-          fragment: { module, targets: [{ format }] },
-          primitive: { topology: 'triangle-list' },
-        });
-
-        // 48 bytes: res(8) time(4) mouse(8) agent(8) goal(8) energy(4) conv(4) + pad(4)
-        const buf = device.createBuffer({
-          size: 48,
-          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-        const bind = device.createBindGroup({
-          layout: pipeline.getBindGroupLayout(0),
-          entries: [{ binding: 0, resource: { buffer: buf } }],
-        });
-
-        const data = new ArrayBuffer(48);
-        const f32 = new Float32Array(data);
-        const start = performance.now();
-        window.addEventListener('resize', fit, { passive: true });
-
-        const frame = () => {
-          const t = (performance.now() - start) / 1000;
-          tick(t);
-          const asp = canvas.width / Math.max(1, canvas.height);
-          f32[0] = canvas.width; f32[1] = canvas.height;
-          f32[2] = t;
-          f32[4] = smooth.mx; f32[5] = smooth.my;
-          f32[6] = agent.px; f32[7] = agent.py;
-          f32[8] = agent.gx; f32[9] = agent.gy;
-          f32[10] = agent.energy;
-          f32[11] = Math.max(0, 1 - Math.min(agent.err / 0.25, 1));
-          device.queue.writeBuffer(buf, 0, data);
-
-          const enc = device.createCommandEncoder();
-          const pass = enc.beginRenderPass({
-            colorAttachments: [{
-              view: ctx.getCurrentTexture().createView(),
-              clearValue: { r: 0.02, g: 0.03, b: 0.06, a: 1 },
-              loadOp: 'clear',
-              storeOp: 'store',
-            }],
-          });
-          pass.setPipeline(pipeline);
-          pass.setBindGroup(0, bind);
-          pass.draw(3);
-          pass.end();
-          device.queue.submit([enc.finish()]);
-          requestAnimationFrame(frame);
-        };
-        requestAnimationFrame(frame);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
-    // Fallback 2D: mismo agente, mismo aprendizaje, dibujado con Canvas2D
-    function initFallback() {
-      fit();
-      const c2 = canvas.getContext('2d');
-      if (!c2) return;
-      window.addEventListener('resize', fit, { passive: true });
-      const N = 46;
-      const nodes: { x: number; y: number; vx: number; vy: number; hue: number }[] = [];
-      for (let i = 0; i < N; i++) {
-        nodes.push({
-          x: Math.random(), y: Math.random(),
-          vx: (Math.random() - 0.5) * 0.0006, vy: (Math.random() - 0.5) * 0.0006,
-          hue: Math.random() < 0.5 ? 351 : 197,
-        });
-      }
-      const start = performance.now();
-      const draw = () => {
-        const t = (performance.now() - start) / 1000;
-        tick(t);
-        const W = canvas.width, H = canvas.height;
-        c2.fillStyle = '#06080f';
-        c2.fillRect(0, 0, W, H);
-
-        for (const n of nodes) {
-          n.x += n.vx; n.y += n.vy;
-          if (n.x < 0 || n.x > 1) n.vx *= -1;
-          if (n.y < 0 || n.y > 1) n.vy *= -1;
-        }
-        for (let i = 0; i < N; i++) {
-          for (let j = i + 1; j < N; j++) {
-            const a = nodes[i], b = nodes[j];
-            const d = Math.hypot(a.x - b.x, a.y - b.y);
-            if (d < 0.16) {
-              c2.strokeStyle = `hsla(${a.hue}, 90%, 65%, ${(0.16 - d) * 1.4})`;
-              c2.lineWidth = 1;
-              c2.beginPath();
-              c2.moveTo(a.x * W, a.y * H);
-              c2.lineTo(b.x * W, b.y * H);
-              c2.stroke();
-            }
-          }
-        }
-        for (const n of nodes) {
-          c2.fillStyle = `hsla(${n.hue}, 90%, 68%, 0.85)`;
-          c2.beginPath();
-          c2.arc(n.x * W, n.y * H, 1.8, 0, Math.PI * 2);
-          c2.fill();
-        }
-
-        // agente que aprende: estela, línea de error, núcleo, objetivo
-        const ax = agent.px * W, ay = (1 - agent.py) * H;
-        const gx = agent.gx * W, gy = (1 - agent.gy) * H;
-        const e = agent.energy;
-        const conv = Math.max(0, 1 - Math.min(agent.err / 0.25, 1));
-
-        for (let i = 1; i < agent.trailLen; i++) {
-          const x0 = agent.trail[(i - 1) * 2] * W, y0 = (1 - agent.trail[(i - 1) * 2 + 1]) * H;
-          const x1 = agent.trail[i * 2] * W, y1 = (1 - agent.trail[i * 2 + 1]) * H;
-          c2.strokeStyle = `hsla(${351 - 154 * (1 - e)}, 92%, 66%, ${0.3 * (1 - i / agent.trailLen)})`;
-          c2.lineWidth = 2;
-          c2.beginPath(); c2.moveTo(x0, y0); c2.lineTo(x1, y1); c2.stroke();
-        }
-
-        // línea de error punteada
-        c2.save();
-        c2.setLineDash([4, 6]);
-        c2.lineDashOffset = -t * 24;
-        c2.strokeStyle = `hsla(${351 - 154 * conv}, 92%, 68%, ${0.25 + 0.45 * (1 - conv)})`;
-        c2.lineWidth = 1.4;
-        c2.beginPath(); c2.moveTo(ax, ay); c2.lineTo(gx, gy); c2.stroke();
-        c2.restore();
-
-        // objetivo
-        const rr = (0.055 - 0.035 * conv) * Math.min(W, H) + 3 * Math.sin(t * 3) * (1 - conv);
-        c2.strokeStyle = `rgba(255, 199, 89, ${0.55 - 0.3 * conv})`;
-        c2.lineWidth = 1.2;
-        c2.beginPath(); c2.arc(gx, gy, Math.max(rr, 4), 0, Math.PI * 2); c2.stroke();
-
-        // núcleo + halo del agente
-        const halo = c2.createRadialGradient(ax, ay, 0, ax, ay, 26 + 22 * e);
-        halo.addColorStop(0, `hsla(${351 - 154 * (1 - e)}, 95%, 70%, ${0.35 + 0.25 * e})`);
-        halo.addColorStop(1, 'transparent');
-        c2.fillStyle = halo;
-        c2.beginPath(); c2.arc(ax, ay, 26 + 22 * e, 0, Math.PI * 2); c2.fill();
-        c2.fillStyle = 'rgba(255,252,250,0.95)';
-        c2.beginPath(); c2.arc(ax, ay, 3.4, 0, Math.PI * 2); c2.fill();
-
-        requestAnimationFrame(draw);
-      };
-      requestAnimationFrame(draw);
-    }
-
-    initWebGPU().then((ok) => { if (!ok) initFallback(); });
-  }
-
-  const canvas = document.getElementById('neural');
-  if (canvas instanceof HTMLCanvasElement) boot(canvas);
-</script>
+<script src="./neural-canvas-script.ts" type="module"></script>

@@ -24,66 +24,68 @@ const base = import.meta.env.BASE_URL;
     </div>
     <p class="hero-note">
       <Icon name="spark" size={15} />
-      El punto de luz no está animado: es una <strong>red neuronal real</strong> (MLP 5→8→2)
-      entrenándose ahora mismo en tu navegador con <code>backpropagation</code> — la CPU calcula
-      cada paso de gradiente y la GPU pinta el resultado con <code>WebGPU</code>.
-      Al cargar la página no sabe nada: explora, se pasa, oscila. En segundos <strong>aprende a
-      seguir tu cursor</strong>; muévelo rápido y la verás readaptarse. Mira su error caer en el
-      panel. Así trabajo: la tecnología no la cuento, la demuestro.
+      El ave del fondo no sigue un guion: su cerebro es una red neuronal mínima que
+      <strong>evoluciona en tu navegador</strong>. Empieza sin saber moverse y va
+      aprendiendo a <strong>caminar</strong>, luego a <strong>saltar</strong> y luego a
+      <strong>volar</strong>, etapa por etapa, hasta alcanzar la luz. A veces tropieza y
+      vuelve a intentarlo; por eso el panel muestra su progreso real. Es un experimento
+      pequeño — y también mi forma de trabajar: construir, medir y corregir en público.
     </p>
   </div>
   <div class="hero-metrics wrap">
     <div class="metric"><strong>60 fps</strong><span>cómputo en el navegador</span></div>
-    <div class="metric"><strong>MLP 5→8→2</strong><span>aprendiendo en vivo</span></div>
+    <div class="metric"><strong>3 etapas</strong><span>caminar · saltar · volar</span></div>
     <div class="metric"><strong>1×1</strong><span>trato directo, sin intermediarios</span></div>
   </div>
 </section>
 
 <style>
-  .hero { position: relative; min-height: 100svh; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+  .hero { position: relative; min-height: 100svh; display: flex; flex-direction: column; justify-content: center; overflow: clip; }
   .hero-veil {
-    position: absolute; inset: 0; pointer-events: none;
+    position: absolute; inset: 0; z-index: 1; pointer-events: none;
     background:
-      radial-gradient(ellipse 80% 60% at 20% 50%, rgba(6, 8, 15, 0.72), transparent 70%),
-      linear-gradient(180deg, rgba(6,8,15,0.5) 0%, transparent 30%, var(--bg) 100%);
+      radial-gradient(70% 60% at 18% 42%, rgba(6, 8, 15, 0.86), transparent 60%),
+      linear-gradient(180deg, rgba(6, 8, 15, 0.5), transparent 30%, rgba(6, 8, 15, 0.75));
   }
-  .hero-inner { position: relative; z-index: 2; padding: 130px 0 40px; }
-  .kicker {
-    display: inline-flex; align-items: center; gap: 10px;
-    border: 1px solid var(--line); background: rgba(11, 15, 28, 0.6);
-    padding: 7px 16px; border-radius: 999px;
-    color: var(--muted); font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase;
-    font-family: var(--font-display);
+  .hero-inner { position: relative; z-index: 2; padding: 150px 0 60px; }
+  .hero h1 {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: clamp(3.1rem, 9vw, 6.4rem); line-height: 0.98;
+    letter-spacing: -0.03em; margin: 18px 0 22px;
   }
-  .live-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--pink); box-shadow: 0 0 14px var(--pink);
-    animation: pulse 2.2s ease-in-out infinite;
-  }
-  @keyframes pulse { 50% { opacity: 0.35; } }
-  h1 {
-    font-size: clamp(3rem, 8vw, 5.6rem); font-weight: 800;
-    margin: 26px 0 10px; letter-spacing: -0.03em;
-  }
-  .grad {
-    background: linear-gradient(100deg, var(--pink) 10%, var(--gold) 50%, var(--cyan) 90%);
+  .hero .grad {
+    background: linear-gradient(96deg, #ff5b73, #ffc759 55%, #59d7ff);
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
-  .role {
-    font-size: clamp(1.05rem, 2.2vw, 1.3rem); color: var(--muted); max-width: 660px;
-  }
+  .role { max-width: 620px; font-size: 1.08rem; line-height: 1.7; color: var(--muted); }
   .role strong { color: var(--text); font-weight: 600; }
-  .cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 36px; }
+  .cta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 34px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 14px 26px; border-radius: 12px;
+    font-family: var(--font-display); font-weight: 600; font-size: 0.95rem;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  }
+  .btn-main {
+    background: linear-gradient(95deg, var(--brand), #ff8360);
+    color: #fff; box-shadow: 0 10px 34px rgba(255, 91, 115, 0.32);
+  }
+  .btn-main:hover { transform: translateY(-2px); box-shadow: 0 16px 44px rgba(255, 91, 115, 0.42); }
+  .btn-ghost {
+    border: 1px solid var(--line); color: var(--text);
+    background: rgba(13, 17, 32, 0.5); backdrop-filter: blur(8px);
+  }
+  .btn-ghost:hover { transform: translateY(-2px); border-color: rgba(89, 215, 255, 0.5); }
   .hero-note {
-    margin-top: 30px; font-size: 0.86rem; color: var(--muted); max-width: 600px;
+    margin-top: 46px; max-width: 560px;
     display: flex; gap: 10px; align-items: flex-start;
+    padding: 14px 18px; border-left: 2px solid var(--brand);
+    background: linear-gradient(90deg, rgba(255, 91, 115, 0.07), transparent);
+    border-radius: 0 12px 12px 0;
+    font-size: 0.86rem; line-height: 1.6; color: var(--muted);
   }
   .hero-note strong { color: var(--text); font-weight: 600; }
   .hero-note :global(svg) { flex-shrink: 0; margin-top: 4px; color: var(--gold); }
-  .hero-note code {
-    color: var(--cyan); background: rgba(89, 215, 255, 0.08);
-    padding: 1px 7px; border-radius: 6px; font-size: 0.82rem;
-  }
   .hero-metrics {
     position: relative; z-index: 2; display: flex; gap: 40px; flex-wrap: wrap;
     padding: 34px 0 46px; border-top: 1px solid var(--line);
@@ -97,12 +99,12 @@ const base = import.meta.env.BASE_URL;
   }
   .metric span { color: var(--muted); font-size: 0.83rem; }
   @media (max-width: 900px) {
-    /* el HUD de telemetría vive abajo a la derecha: deja sitio para que no tape las métricas */
-    .hero { padding-bottom: 250px; }
+    /* el HUD vive abajo: deja sitio para que no tape las métricas */
+    .hero { padding-bottom: 260px; }
     .hero-metrics { gap: 22px; }
     .hero-note { max-width: 100%; }
   }
   @media (max-width: 420px) {
-    .hero { padding-bottom: 220px; }
+    .hero { padding-bottom: 230px; }
   }
 </style>
