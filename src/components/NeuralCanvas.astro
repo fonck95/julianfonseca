@@ -1,28 +1,40 @@
 ---
-// Hero: campo neuronal + ave que evoluciona (caminar → saltar → volar).
+// Hero: ave que evoluciona dentro de un viento real (Navier–Stokes),
+// con un cerebro transformer — en PC y en móvil.
 //
-// POR QUÉ TODO VA INLINE: el motor vivía en un módulo externo
-// (`neural-canvas-script.ts` → `_astro/index.HASH.js`). Esa única petición
-// HTTP era el punto de fallo de todo el hero: si el servidor la respondía
-// con HTML (base incorrecta, MIME, servidor estático sobre la carpeta del
-// proyecto), no cargaba el módulo… y tampoco el fallback, que estaba dentro
-// del mismo archivo. Por eso el HUD se quedaba en `aptitud —` /
-// `simulaciones 0`: valores estáticos del markup.
+// POR QUÉ TODO VA INLINE: el motor vivía en un módulo externo cuyo único
+// punto de fallo era la petición HTTP (MIME/base/servidor estático). Aquí se
+// lee del disco en el build y se incrusta en el HTML: si la página se ve, el
+// ave corre.
 //
-// Aquí el motor se lee del disco en el build y se incrusta en el HTML:
-// cero peticiones, cero bundler, cero dependencia del `base`. Si el HTML se
-// ve, el ave corre.
+// POR QUÉ EN PARTES: el motor son ~1 500 líneas y vive partido en public/hero/
+// (core → fluido → política → criatura → render → boot → entrada) para poder
+// escribir y validar cada pieza por separado. Este frontmatter las concatena
+// EN ORDEN en un solo script clásico: las seis primeras partes cuelgan de
+// window.__HERO__ y la última arranca; si falta alguna, el HUD lo dice en vez
+// de morir en silencio.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const heroJs = readFileSync(
-  fileURLToPath(new URL('../../public/hero.js', import.meta.url)),
-  'utf-8',
-);
-// `</script>` dentro del código cortaría el bloque: no lo hay, y si alguien
-// lo añade el build debe fallar de forma ruidosa y no servir HTML roto.
+const HERO_PARTS = [
+  '00-core.js',
+  '10-fluid.js',
+  '20-policy.js',
+  '30-creature.js',
+  '40-render.js',
+  '50-boot.js',
+  '99-entry.js',
+];
+
+const heroDir = fileURLToPath(new URL('../../public/hero/', import.meta.url));
+const heroJs = HERO_PARTS.map(
+  (f) => readFileSync(new URL(f, `file://${heroDir}`), 'utf-8'),
+).join('\n;\n');
+
+// `</script>` dentro del código cortaría el bloque: no lo hay, y si alguien lo
+// añade el build debe fallar de forma ruidosa y no servir HTML roto.
 if (/<\/script/i.test(heroJs)) {
-  throw new Error('public/hero.js contiene "</script>": no se puede incrustar en el HTML.');
+  throw new Error('public/hero/*.js contiene "</script>": no se puede incrustar en el HTML.');
 }
 ---
 
@@ -32,7 +44,7 @@ if (/<\/script/i.test(heroJs)) {
   <div class="hud-head">
     <span class="hud-dot" id="hud-dot"></span>
     <span class="hud-title">Evolución en vivo</span>
-    <span class="hud-loc">CPU del navegador</span>
+    <span class="hud-loc">Navier–Stokes · CPU</span>
   </div>
 
   <ol class="hud-stages" id="hud-stages">
@@ -43,7 +55,7 @@ if (/<\/script/i.test(heroJs)) {
 
   <svg class="hud-graph" id="hud-graph" viewBox="0 0 160 46" preserveAspectRatio="none" aria-hidden="true">
     <line x1="0" y1="45" x2="160" y2="45" stroke="rgba(255,255,255,.12)" stroke-width="0.6" />
-    <line id="hud-goal" x1="0" y1="12.5" x2="160" y2="12.5" stroke="rgba(255,199,89,.35)" stroke-width="0.5"
+    <line id="hud-goal" x1="0" y1="13.5" x2="160" y2="13.5" stroke="rgba(255,199,89,.35)" stroke-width="0.5"
       stroke-dasharray="3 4" />
     <polyline id="hud-curve" fill="none" stroke="url(#gHud)" stroke-width="1.4"
       stroke-linejoin="round" stroke-linecap="round" points="" />
@@ -58,9 +70,10 @@ if (/<\/script/i.test(heroJs)) {
   <dl class="hud-rows">
     <div><dt>aptitud</dt><dd id="hud-fit">—</dd></div>
     <div><dt>distancia</dt><dd id="hud-err">—</dd></div>
+    <div><dt>sustentación</dt><dd id="hud-lift">—</dd></div>
     <div><dt>simulaciones</dt><dd id="hud-steps">0</dd></div>
   </dl>
-  <p class="hud-msg" id="hud-msg">cerebro al azar: la criatura ni se mueve…</p>
+  <p class="hud-msg" id="hud-msg">cerebro al azar: el ave ni se sostiene…</p>
   <button class="hud-reset" id="hud-reset" type="button">Reiniciar desde cero</button>
 </div>
 
@@ -88,7 +101,7 @@ if (/<\/script/i.test(heroJs)) {
     font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase;
     color: var(--text); font-weight: 600;
   }
-  .hud-loc { margin-left: auto; font-size: 0.62rem; color: var(--muted); letter-spacing: 0.06em; }
+  .hud-loc { margin-left: auto; font-size: 0.6rem; color: var(--muted); letter-spacing: 0.06em; }
 
   .hud-stages {
     list-style: none; margin: 12px 0 0; padding: 0;
@@ -123,7 +136,6 @@ if (/<\/script/i.test(heroJs)) {
     margin: 11px 0 0;
   }
   .hud-rows > div { display: flex; flex-direction: column; gap: 1px; }
-  .hud-rows > div:last-child { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: baseline; gap: 8px; }
   .hud-rows dt {
     font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
   }
@@ -145,10 +157,14 @@ if (/<\/script/i.test(heroJs)) {
   }
   .hud-reset:hover { color: var(--text); border-color: rgba(255, 91, 115, 0.5); background: rgba(255, 91, 115, 0.07); }
   @media (max-width: 860px) {
-    .hud { right: 16px; left: 16px; bottom: 16px; width: auto; }
+    .hud { right: 12px; left: 12px; bottom: 12px; width: auto; padding: 12px 13px 13px; }
+    .hud-graph { height: 32px; margin-top: 9px; }
+    .hud-rows { gap: 6px 10px; }
+    .hud-msg { font-size: 0.68rem; }
   }
   @media (max-width: 420px) {
-    .hud-graph { height: 34px; }
+    .hud-graph { display: none; }
+    .hud-stages li { font-size: 0.58rem; padding: 4px 5px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .hud-dot, .hud-stages li.now .st-dot { animation: none; }
