@@ -1,6 +1,7 @@
 // Shader WGSL del hero: campo neuronal de fondo + pájaro dibujado con SDF.
 // Uniforms (64 bytes): res@0 time@8 mouse@16 agent@24 goal@32 energy@40
 // conv@44 wing@48 legL@52 legR@56 grounded@60
+// Nota: agent y goal llegan YA escalados por aspecto desde JS; mouse no.
 export const WGSL = /* wgsl */ `
 struct Uniforms {
   res: vec2f, time: f32, mouse: vec2f,
@@ -57,8 +58,8 @@ fn sdSeg(p: vec2f, a: vec2f, b: vec2f) -> f32 {
   var p = vec2f(uv.x * asp, uv.y);
   let t = u.time;
   let m = vec2f(u.mouse.x * asp, u.mouse.y);
-  let A = vec2f(u.agent.x * asp, u.agent.y);
-  let GO = vec2f(u.goal.x * asp, u.goal.y);
+  let A = u.agent;
+  let GO = u.goal;
   let e = u.energy;
   let conv = u.conv;
 
