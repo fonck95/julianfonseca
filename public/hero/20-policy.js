@@ -32,7 +32,7 @@
   var DF = 24;       // ancho del FFN
   var TOK = [3, 7, 4, 3, 3]; // features por token
   var NT = TOK.length;       // 5 tokens
-  var NOUT = 4;              // legL, legR, wing, jump
+  var NOUT = 4;              // legL, legR, wing, jump/fold
 
   // ---- layout del genotipo (offsets en el Float64Array plano) ----
   var off = {}, size = 0;
@@ -55,6 +55,9 @@
     this.k = new Float64Array(NT * D);
     this.v = new Float64Array(NT * D);
     this.a = new Float64Array(NT * D);
+    this.sc = new Float64Array(NT * NT); // scores de atención (buffer propio:
+    // si compartiera memoria con this.a, escribir la salida de un token
+    // pisaría las filas de scores que los siguientes aún deben leer)
     this.f = new Float64Array(NT * DF);
     this.o = new Float64Array(NOUT);
     this.feat = [new Float64Array(TOK[0]), new Float64Array(TOK[1]),
@@ -138,7 +141,7 @@
 
     // 3) atención por cabeza: A = softmax(QKᵀ/√d_k)V
     var scale = 1 / Math.sqrt(DH);
-    var scores = this.a; // reutiliza buffer (se reescribe abajo)
+    var scores = this.sc;
     for (h = 0; h < HEADS; h++) {
       var ho = h * DH;
       for (t = 0; t < NT; t++) {
@@ -154,7 +157,6 @@
         for (d = 0; d < DH; d++) {
           s = 0;
           for (j = 0; j < NT; j++) s += scores[t * NT + j] * v[j * D + ho + d];
-          // a[] guarda el resultado de la atención (post-proyección abajo)
           a[t * D + ho + d] = s;
         }
       }
