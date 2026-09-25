@@ -1,0 +1,235 @@
+---
+// Hero: campo neuronal WebGPU (WGSL) con fallback elegante en canvas 2D.
+---
+<canvas id="neural" aria-hidden="true"></canvas>
+
+<style>
+  #neural {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+  }
+</style>
+
+<script>
+  const WGSL = /* wgsl */ `
+    struct Uniforms { res: vec2f, time: f32, mouse: vec2f };
+    @group(0) @binding(0) var<uniform> u: Uniforms;
+
+    fn hash21(p: vec2f) -> f32 {
+      var q = fract(p * vec2f(123.34, 456.21));
+      q += dot(q, q + 45.32);
+      return fract(q.x * q.y);
+    }
+
+    fn nodeLayer(uv: vec2f, cells: f32, t: f32, seed: f32) -> vec3f {
+      let g = uv * cells;
+      let cell = floor(g);
+      let f = fract(g);
+      var col = vec3f(0.0);
+      for (var dy = -1.0; dy <= 1.0; dy = dy + 1.0) {
+        for (var dx = -1.0; dx <= 1.0; dx = dx + 1.0) {
+          let o = vec2f(dx, dy);
+          let id = cell + o;
+          let rnd = hash21(id + seed);
+          if (rnd < 0.55) { continue; }
+          let breathe = sin(t * (0.6 + rnd) + rnd * 20.0) * 0.5 + 0.5;
+          let pos = o + vec2f(hash21(id + 7.7 + seed), hash21(id + 3.3 + seed)) * 0.8 + 0.1;
+          let d = length(f - pos);
+          let glow = (0.012 + 0.01 * breathe) / (d * d + 0.0015);
+          let pink = vec3f(1.0, 0.36, 0.45);
+          let cyan = vec3f(0.35, 0.84, 1.0);
+          let c = mix(cyan, pink, hash21(id * 1.7 + seed));
+          col += c * glow * 0.0025 * (0.55 + 0.75 * breathe);
+        }
+      }
+      return col;
+    }
+
+    @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+      var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+      return vec4f(p[i], 0.0, 1.0);
+    }
+
+    @fragment fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
+      let uv = frag.xy / u.res;
+      let asp = u.res.x / u.res.y;
+      var p = vec2f(uv.x * asp, uv.y);
+      let t = u.time;
+      let m = vec2f(u.mouse.x * asp, u.mouse.y);
+
+      // fondo: niebla profunda con domain warp lento
+      var q = p * 1.6;
+      q += 0.25 * vec2f(sin(q.y * 2.1 + t * 0.17), cos(q.x * 1.9 - t * 0.13));
+      let fog = 0.5 + 0.5 * sin(q.x * 1.7 + sin(q.y * 2.3 + t * 0.11) * 1.4);
+      var col = mix(vec3f(0.024, 0.031, 0.06), vec3f(0.05, 0.07, 0.14), fog * 0.85);
+
+      // capas de nodos a distintas escalas
+      col += nodeLayer(p, 6.0, t, 0.0) * 1.0;
+      col += nodeLayer(p, 11.0, t * 1.1, 40.0) * 0.55;
+      col += nodeLayer(p, 19.0, t * 0.9, 90.0) * 0.3;
+
+      // sinapsis: hilos que despiertan cerca del puntero
+      let dm = length(p - m);
+      let pull = exp(-dm * 3.2);
+      let threads = sin(p.x * 42.0 + t * 2.0) * sin(p.y * 42.0 - t * 1.7);
+      col += vec3f(1.0, 0.45, 0.55) * smoothstep(0.75, 1.0, threads) * pull * 0.35;
+      col += vec3f(0.4, 0.8, 1.0) * pull * 0.12;
+
+      // halos del puntero
+      col += vec3f(1.0, 0.42, 0.52) * (0.004 / (dm * dm + 0.02)) * 0.05;
+
+      // grano y viñeta
+      let grain = (hash21(uv * u.res + fract(t)) - 0.5) * 0.03;
+      col += grain;
+      let vig = 1.0 - 0.45 * length((uv - 0.5) * vec2f(1.15, 1.0));
+      col *= vig;
+
+      return vec4f(col, 1.0);
+    }
+  `;
+
+  const canvas = document.getElementById('neural') as HTMLCanvasElement | null;
+  if (!canvas) return;
+
+  const state = { mx: 0.5, my: 0.5, tx: 0.5, ty: 0.5 };
+  const track = (e: PointerEvent) => {
+    const r = canvas.getBoundingClientRect();
+    state.tx = (e.clientX - r.left) / r.width;
+    state.ty = 1 - (e.clientY - r.top) / r.height;
+  };
+  window.addEventListener('pointermove', track, { passive: true });
+
+  const fit = () => {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(canvas.clientWidth * dpr);
+    canvas.height = Math.round(canvas.clientHeight * dpr);
+  };
+
+  async function initWebGPU(): Promise<boolean> {
+    if (!('gpu' in navigator)) return false;
+    try {
+      const adapter = await (navigator as any).gpu.requestAdapter();
+      if (!adapter) return false;
+      const device = await adapter.requestDevice();
+      const ctx = canvas!.getContext('webgpu') as any;
+      if (!ctx) return false;
+      const format = (navigator as any).gpu.getPreferredCanvasFormat();
+      fit();
+      ctx.configure({ device, format, alphaMode: 'opaque' });
+
+      const module = device.createShaderModule({ code: WGSL });
+      const pipeline = device.createRenderPipeline({
+        layout: 'auto',
+        vertex: { module },
+        fragment: { module, targets: [{ format }] },
+        primitive: { topology: 'triangle-list' },
+      });
+
+      const buf = device.createBuffer({
+        size: 32,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      const bind = device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [{ binding: 0, resource: { buffer: buf } }],
+      });
+
+      const data = new ArrayBuffer(32);
+      const f32 = new Float32Array(data);
+      let start = performance.now();
+
+      window.addEventListener('resize', () => { fit(); }, { passive: true });
+
+      const frame = () => {
+        state.mx += (state.tx - state.mx) * 0.06;
+        state.my += (state.ty - state.my) * 0.06;
+        const t = (performance.now() - start) / 1000;
+        f32[0] = canvas!.width; f32[1] = canvas!.height;
+        f32[2] = t;
+        f32[4] = state.mx; f32[5] = state.my;
+        device.queue.writeBuffer(buf, 0, data);
+
+        const enc = device.createCommandEncoder();
+        const pass = enc.beginRenderPass({
+          colorAttachments: [{
+            view: ctx.getCurrentTexture().createView(),
+            clearValue: { r: 0.02, g: 0.03, b: 0.06, a: 1 },
+            loadOp: 'clear',
+            storeOp: 'store',
+          }],
+        });
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, bind);
+        pass.draw(3);
+        pass.end();
+        device.queue.submit([enc.finish()]);
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Fallback: campo de nodos en canvas 2D para navegadores sin WebGPU
+  function initFallback() {
+    fit();
+    const c2 = canvas!.getContext('2d')!;
+    const nodes: { x: number; y: number; vx: number; vy: number; hue: number }[] = [];
+    const N = 46;
+    for (let i = 0; i < N; i++) {
+      nodes.push({
+        x: Math.random(), y: Math.random(),
+        vx: (Math.random() - 0.5) * 0.0006, vy: (Math.random() - 0.5) * 0.0006,
+        hue: Math.random() < 0.5 ? 351 : 197,
+      });
+    }
+    const draw = () => {
+      const W = canvas!.width, H = canvas!.height;
+      c2.fillStyle = '#06080f';
+      c2.fillRect(0, 0, W, H);
+      for (const n of nodes) {
+        n.x += n.vx; n.y += n.vy;
+        if (n.x < 0 || n.x > 1) n.vx *= -1;
+        if (n.y < 0 || n.y > 1) n.vy *= -1;
+      }
+      for (let i = 0; i < N; i++) {
+        for (let j = i + 1; j < N; j++) {
+          const a = nodes[i], b = nodes[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < 0.16) {
+            c2.strokeStyle = `hsla(${a.hue}, 90%, 65%, ${(0.16 - d) * 1.4})`;
+            c2.lineWidth = 1;
+            c2.beginPath();
+            c2.moveTo(a.x * W, a.y * H);
+            c2.lineTo(b.x * W, b.y * H);
+            c2.stroke();
+          }
+        }
+      }
+      for (const n of nodes) {
+        c2.fillStyle = `hsla(${n.hue}, 90%, 68%, 0.85)`;
+        c2.beginPath();
+        c2.arc(n.x * W, n.y * H, 1.8, 0, Math.PI * 2);
+        c2.fill();
+      }
+      // puntero
+      const mx = state.mx * W, my = (1 - state.my) * H;
+      for (const n of nodes) {
+        const d = Math.hypot(n.x * W - mx, n.y * H - my);
+        if (d < 140) {
+          c2.strokeStyle = `hsla(351, 95%, 68%, ${(140 - d) / 700})`;
+          c2.beginPath();
+          c2.moveTo(mx, my);
+          c2.lineTo(n.x * W, n.y * H);
+          c2.stroke();
+        }
+      }
+      requestAnimationFrame(draw);
+    };
+    window.addEventListener('resize', fit, { passive: true });
+    requestAnimationFrame(draw);
+  }
+
+  initWebGPU().then((ok) => { if (!ok) initFallback(); });
+</script>

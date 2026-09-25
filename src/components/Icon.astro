@@ -1,0 +1,106 @@
+---
+// Iconografía SVG propia, trazos finos, sin emojis.
+interface Props {
+  name:
+    | 'agent' | 'compass' | 'book' | 'plug' | 'scale' | 'cube'
+    | 'stethoscope' | 'brain' | 'code' | 'mail' | 'github' | 'arrow' | 'spark' | 'pin';
+  size?: number;
+}
+const { name, size = 24 } = Astro.props;
+const s = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.6', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' };
+---
+
+{ name === 'agent' && (
+  <svg {...s}>
+    <rect x="6" y="8" width="12" height="11" rx="3" />
+    <path d="M12 4v4" /><circle cx="12" cy="3.4" r="1.1" />
+    <circle cx="9.6" cy="13" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="14.4" cy="13" r="0.9" fill="currentColor" stroke="none" />
+    <path d="M9.8 16.2c1.4.9 3 .9 4.4 0" />
+    <path d="M3 12.5v3M21 12.5v3" />
+  </svg>
+) }
+{ name === 'compass' && (
+  <svg {...s}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m15.2 8.8-1.9 4.5-4.5 1.9 1.9-4.5z" />
+  </svg>
+) }
+{ name === 'book' && (
+  <svg {...s}>
+    <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5z" />
+    <path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H19v3H6.5" />
+    <path d="M8.5 7.5h6M8.5 10.5h4" />
+  </svg>
+) }
+{ name === 'plug' && (
+  <svg {...s}>
+    <path d="M9 3v5M15 3v5" />
+    <path d="M6 8h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6z" />
+    <path d="M12 17v4" />
+  </svg>
+) }
+{ name === 'scale' && (
+  <svg {...s}>
+    <path d="M12 4v16M7 20h10" />
+    <path d="M5 8h14" />
+    <path d="m5 8-2.5 5a3 3 0 0 0 5 0z" />
+    <path d="m19 8-2.5 5a3 3 0 0 0 5 0z" />
+    <circle cx="12" cy="4.6" r="1.2" />
+  </svg>
+) }
+{ name === 'cube' && (
+  <svg {...s}>
+    <path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z" />
+    <path d="M12 3v9m0 0L4 7.5M12 12l8-4.5" />
+    <path d="M8 5.2 16 9.8M16 5.2 8 9.8" opacity="0.45" />
+  </svg>
+) }
+{ name === 'stethoscope' && (
+  <svg {...s}>
+    <path d="M5 3v5a5 5 0 0 0 10 0V3" />
+    <path d="M3.4 3H5m10 0h1.6" />
+    <path d="M10 13v3a5 5 0 0 0 10 0v-1.6" />
+    <circle cx="20" cy="12.4" r="2" />
+  </svg>
+) }
+{ name === 'brain' && (
+  <svg {...s}>
+    <path d="M12 4.5a3 3 0 0 0-5.6-1.3A3 3 0 0 0 4 8.4a3.2 3.2 0 0 0 .7 4.9A3 3 0 0 0 6.6 18 3 3 0 0 0 12 17.2z" />
+    <path d="M12 4.5a3 3 0 0 1 5.6-1.3A3 3 0 0 1 20 8.4a3.2 3.2 0 0 1-.7 4.9A3 3 0 0 1 17.4 18 3 3 0 0 1 12 17.2z" />
+    <path d="M12 4.5v12.7" opacity="0.5" />
+  </svg>
+) }
+{ name === 'code' && (
+  <svg {...s}>
+    <path d="m8 6-5 6 5 6M16 6l5 6-5 6M13.5 4l-3 16" />
+  </svg>
+) }
+{ name === 'mail' && (
+  <svg {...s}>
+    <rect x="3" y="5" width="18" height="14" rx="2.5" />
+    <path d="m3.8 7 7.1 5.4c.7.5 1.6.5 2.2 0L20.2 7" />
+  </svg>
+) }
+{ name === 'github' && (
+  <svg {...s} fill="currentColor" stroke="none">
+    <path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.58 9.58 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85V21c0 .27.18.58.69.48A10 10 0 0 0 12 2" />
+  </svg>
+) }
+{ name === 'arrow' && (
+  <svg {...s}>
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </svg>
+) }
+{ name === 'spark' && (
+  <svg {...s}>
+    <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+    <path d="M12 8.5 13.4 11 16 12l-2.6 1L12 15.5 10.6 13 8 12l2.6-1z" fill="currentColor" stroke="none" />
+  </svg>
+) }
+{ name === 'pin' && (
+  <svg {...s}>
+    <path d="M12 21s-6.5-5.6-6.5-10.4a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21" />
+    <circle cx="12" cy="10.4" r="2.4" />
+  </svg>
+) }
