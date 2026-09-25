@@ -9,16 +9,15 @@
 //
 // Discretización: Jos Stam, «Stable Fluids» (SIGGRAPH 1999). Operator splitting
 // en cinco pasos por frame:
-//   1. fuerzas        u += dt·f
-//   2. difusión       (I − ν·dt·∇²)u = u₀   → implícita, Jacobi
-//   3. proyección     ∇²p = ∇·u             → Jacobi; u −= dt·∇p
-//   4. advección      semilagrangiana: se traza hacia atrás y se interpola
-//   5. proyección     otra vez, para que el campo advectado siga siendo ∇·u = 0
+//   1. viento + fuerzas   u += dt·f ; relajación hacia W(t)
+//   2. difusión           (I − ν·dt·∇²)u = u₀   → implícita, Jacobi
+//   3. proyección         ∇²p = ∇·u             → Jacobi; u −= ∇p
+//   4. advección          semilagrangiana: se traza hacia atrás y se interpola
+//   5. proyección         otra vez, para que el campo advectado siga siendo ∇·u = 0
 //
-// El paso viscoso implícito y la advección semilagangiana son incondicionalmente
+// El paso viscoso implícito y la advección semilagragiana son incondicionalmente
 // estables: el solver no revienta con una ráfaga fuerte ni con un dt grande.
-// Paredes no-deslizantes (la componente normal y la tangencial se invierten en
-// el borde).
+// Paredes no-deslizantes (las componentes se invierten en el borde).
 //
 // Las derivadas usan pasos reales (sx, sy) en unidades de mundo, así que las
 // celdas no necesitan ser cuadradas: la rejilla del móvil puede ser más basta
@@ -33,11 +32,13 @@
     this.itersP = opt.itersP || 8;   // iteraciones de Jacobi en la presión
     this.itersD = opt.itersD || 4;   // iteraciones de Jacobi en la difusión
     // ν en unidades de mundo²/s. Con 1 unidad = 1 cm, ν_aire = 1.5e-5 m²/s
-    // = 0.15 unidades²/s: es el valor físico a esta escala.
+    // = 0.15 unidades²/s: el valor físico del aire a esta escala.
     this.nu = opt.nu === undefined ? 0.15 : opt.nu;
     this.decay = opt.decay === undefined ? 0.3 : opt.decay;
     this.maxSpeed = opt.maxSpeed || 120;
-    this.windK = opt.windK === undefined ? 1.6 : opt.windK;
+    // windK: a qué velocidad se relaja el campo hacia el viento ambiente.
+    // Bajo (0.5) para que las estelas del aleteo duren varios frames.
+    this.windK = opt.windK === undefined ? 0.5 : opt.windK;
 
     var n = nx * ny;
     this.u = new Float64Array(n);  this.v = new Float64Array(n);
@@ -77,7 +78,7 @@
     x[nx - 1 + (ny - 1) * nx] = 0.5 * (x[nx - 2 + (ny - 1) * nx] + x[nx - 1 + (ny - 2) * nx]);
   };
 
-  // Jacobi sobre  c·x[i,j] = x₀[i,j] + a·(vecinos x) + b·(vecinos y)
+  // Jacobi sobre  c·x[i,j] = x0[i,j] + a·(vecinos x) + b·(vecinos y)
   Fluid.prototype.linSolve = function (b, x, x0, a, bb, c, iters) {
     var nx = this.nx, ny = this.ny, i, j, k, idx;
     for (k = 0; k < iters; k++) {
@@ -97,15 +98,22 @@
     this.linSolve(b, x, x0, ta, tb, 1 + 2 * (ta + tb), this.itersD);
   };
 
-  // Proyección de presión: resuelve ∇²p = ∇·u y resta dt·∇p de la velocidad.
-  Fluid.prototype.project = function (dt) {
+  // Proyección de presión. Resuelve el problema de Poisson
+  //     ∇²p = ∇·u*        (u* = velocidad antes de proyectar)
+  // y corrige
+  //     u = u* − ∇p
+  // Con eso ∇·u = 0 (salvo error de truncamiento de Jacobi). El dt NO aparece:
+  // se trabaja con presión cinemática ya escalada por dt en la divergencia.
+  Fluid.prototype.project = function () {
     var nx = this.nx, ny = this.ny, u = this.u, v = this.v, p = this.p, div = this.div;
     var ax = this.ax, ay = this.ay, ax2 = this.ax2, ay2 = this.ay2;
     var i, j, idx;
     for (j = 1; j < ny - 1; j++) {
       idx = 1 + j * nx;
       for (i = 1; i < nx - 1; i++, idx++) {
-        div[idx] = 0.5 * (ax * (u[idx + 1] - u[idx - 1]) + ay * (v[idx + nx] - v[idx - nx]));
+        // x0 de linSolve debe ser −∇·u* para resolver ∇²p = ∇·u* con el signo
+        // que usa linSolve (c·x = x0 + a·x_vecinos).
+        div[idx] = -0.5 * (ax * (u[idx + 1] - u[idx - 1]) + ay * (v[idx + nx] - v[idx - nx]));
         p[idx] = 0;
       }
     }
@@ -114,8 +122,8 @@
     for (j = 1; j < ny - 1; j++) {
       idx = 1 + j * nx;
       for (i = 1; i < nx - 1; i++, idx++) {
-        u[idx] -= dt * 0.5 * ax * (p[idx + 1] - p[idx - 1]);
-        v[idx] -= dt * 0.5 * ay * (p[idx + nx] - p[idx - nx]);
+        u[idx] -= 0.5 * (p[idx + 1] - p[idx - 1]) / this.sx * this.sx * ax;
+        v[idx] -= 0.5 * (p[idx + nx] - p[idx - nx]) / this.sy * this.sy * ay;
       }
     }
     this.setBnd(1, u); this.setBnd(2, v);
@@ -177,12 +185,12 @@
     this.u0.set(this.u); this.v0.set(this.v);
     this.diffuse(1, this.u, this.u0, dt);
     this.diffuse(2, this.v, this.v0, dt);
-    this.project(dt);
+    this.project();
     // advección (u·∇)u
     this.u0.set(this.u); this.v0.set(this.v);
     this.advect(1, this.u, this.u0, dt);
     this.advect(2, this.v, this.v0, dt);
-    this.project(dt);
+    this.project();
     // disipación numérica extra: sin ella el campo acumula energía para siempre
     var d = Math.exp(-this.decay * dt), i;
     for (i = 0; i < this.u.length; i++) { this.u[i] *= d; this.v[i] *= d; }
@@ -204,7 +212,8 @@
   };
 
   // Reparte una fuerza puntual en las 4 celdas vecinas con pesos bilineales
-  // (spreading tipo immersed-boundary). fx, fy son ACELERACIONES sobre el aire.
+  // (spreading tipo immersed-boundary). Los pesos ya suman 1, así que la fuerza
+  // total se conserva. fx, fy son ACELERACIONES sobre el aire (unidades/s²).
   Fluid.prototype.inject = function (x, y, fx, fy) {
     var gx = x * this.ax + 0.5, gy = y * this.ay + 0.5;
     var i0 = Math.floor(gx), j0 = Math.floor(gy), s = gx - i0, t = gy - j0;
@@ -213,8 +222,8 @@
     var w = [(1 - s) * (1 - t), s * (1 - t), (1 - s) * t, s * t];
     var idx = [a, a + 1, b, b + 1];
     for (var k = 0; k < 4; k++) {
-      this.fx[idx[k]] += fx * w[k] * 4;
-      this.fy[idx[k]] += fy * w[k] * 4;
+      this.fx[idx[k]] += fx * w[k];
+      this.fy[idx[k]] += fy * w[k];
     }
   };
 
