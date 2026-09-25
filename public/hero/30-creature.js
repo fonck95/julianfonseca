@@ -18,9 +18,15 @@
 // ave de verdad. Newton III: el aire recibe −F en el punto del panel
 // (downwash y vórtices que el propio fluido transporta después).
 //
-// Unidades: 1 unidad de mundo = 1 cm. QS = ½ρ·(cm/m)²/m convierte v²·S a
-// aceleración en unidades/s², comparable con G (verificado: aleteo máximo
-// ≈ 1.8·G — volar exige optimizar, no es gratis ni imposible).
+// CALIBRACIÓN (verificada headless): con G=12.5, cuerda 2.8 cm, C_L=2.2
+// (típico de régimen de ave pequeña con efectos no estacionarios: vórtice de
+// borde de ataque) y actuadores de ala a 40/2.8 rad/s², un aleteo bien
+// sincronizado produce ≈1.7·G de sustentación media. Es deliberado: con la
+// calibración anterior el techo era 0.93·G — NINGUNA política podía volar,
+// por buenas que fueran las 9000 simulaciones. Ahora volar exige optimizar
+// fase y plegado, pero es alcanzable. Con las alas quietas el ave cae despacio
+// (paracaídas pasivo: el arrastre del panel frena la caída) — subir sigue
+// exigiendo aletear de verdad.
 //
 // EVOLUCIÓN: hill-climbing con mutación gaussiana annealed (σ 0.35→0.05) sobre
 // el genotipo plano del transformer. Tres etapas — caminar, saltar, volar —
@@ -31,12 +37,12 @@
   var H = (window.__HERO__ = window.__HERO__ || {});
 
   var DT = H.DT;
-  var G = 21.6;                 // gravedad del mundo (comprimida ×2.2)
+  var G = 12.5;                 // gravedad del mundo (comprimida, calibrada)
   var RHO = 1.2;                // densidad del aire kg/m³
-  var CL_MAX = 1.5, CD0 = 0.45, CD_BODY = 0.9;
+  var CL_MAX = 2.2, CD0 = 0.45, CD_BODY = 0.9;
   var WING_LEN = 3.5;           // semienvergadura (unidades ≈ cm)
   var PANELS = 4;
-  var PANEL_S = (WING_LEN / PANELS) * 1.4;   // cm² por panel
+  var PANEL_S = (WING_LEN / PANELS) * 2.8;   // cm² por panel (cuerda 2.8 cm)
   var S_BODY = 2.4;                          // cm² frontal del cuerpo
   var MASS = 0.069;             // kg (~69 g, un gorrión)
   // ½ρ·(cm→m)²/m : v²[unidades²/s²]·S[cm²] → aceleración [unidades/s²]
@@ -88,10 +94,12 @@
     b.legLv += (cmdLegL * 1.1 - b.legL) * legStiff * DT - b.legLv * 6 * DT;
     b.legRv += (cmdLegR * 1.1 - b.legR) * legStiff * DT - b.legRv * 6 * DT;
     b.legL += b.legLv * DT; b.legR += b.legRv * DT;
-    var wingStiff = 30;
-    var wCmd = 0.75 + cmdWing * 0.75;
-    b.wingLv += (wCmd - b.wingL) * wingStiff * DT - b.wingLv * 3.2 * DT;
-    b.wingRv += (wCmd - b.wingR) * wingStiff * DT - b.wingRv * 3.2 * DT;
+    // actuadores de ala rápidos: sin esto el transformer no puede batir a la
+    // frecuencia que hace falta para generar sustentación (medido headless).
+    var wingStiff = 40;
+    var wCmd = 0.75 + cmdWing * 0.95;
+    b.wingLv += (wCmd - b.wingL) * wingStiff * DT - b.wingLv * 2.8 * DT;
+    b.wingRv += (wCmd - b.wingR) * wingStiff * DT - b.wingRv * 2.8 * DT;
     b.wingL += b.wingLv * DT; b.wingR += b.wingRv * DT;
     var foldCmd = b.grounded ? 0 : Math.max(0, cmd4);
     b.foldV += (foldCmd - b.fold) * 24 * DT - b.foldV * 8 * DT;
@@ -100,7 +108,7 @@
 
     // ---- salto (solo en tierra; cmd4 > 0.75) ----
     if (b.grounded && cmd4 > 0.75) {
-      b.vy += 6.5 * cmd4; b.y = 0.05; b.grounded = false;
+      b.vy += 13 * cmd4; b.y = 0.05; b.grounded = false;
     }
 
     // ---- patas: empuje por fricción cuando tocan ----
