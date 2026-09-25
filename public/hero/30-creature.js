@@ -12,27 +12,28 @@
 //   D = q·(C_D0 + C_Lmax·sin²α)     resistencia, opuesta a e
 //   F = L·n − D·e
 //
-// S_eff = S·(1 − 0.7·plegado): al subir el ala se pliega (menos superficie,
-// menos sustentación parásita hacia abajo). Sin plegado el aleteo simétrico
-// da fuerza NETA cero; con plegado asimétrico el downstroke domina — como un
-// ave de verdad. Newton III: el aire recibe −F en el punto del panel
-// (downwash y vórtices que el propio fluido transporta después).
+// S_eff = S·(1 − 0.7·plegado). El plegado combina un REFLEJO físico (el ala se
+// pliega sola en la carrera ascendente, proporcional a −wRate: subir el ala
+// extendida empujaría el ave hacia abajo) con un ajuste fino que aprende la
+// política. Sin esa asimetría el aleteo simétrico da fuerza NETA casi cero.
+// Newton III: el aire recibe −F en el punto del panel (downwash y vórtices que
+// el propio fluido transporta después).
 //
 // CALIBRACIÓN (verificada headless): con G=12.5, cuerda 2.8 cm, C_L=2.2 y
 // actuadores de ala a 40/2.8 rad/s², un aleteo bien sincronizado produce
-// ≈1.7·G de sustentación media. Es deliberado: con la calibración anterior el
-// techo era 0.93·G — NINGUNA política podía volar, por buenas que fueran las
-// simulaciones. Ahora volar exige optimizar fase y plegado, pero es alcanzable.
-// Con las alas quietas el ave cae despacio (paracaídas pasivo: el arrastre del
-// panel frena la caída) — subir sigue exigiendo aletear de verdad.
+// ≈1.4·G de sustentación media (trepa); con alas quietas el ave cae despacio
+// (0.85·G de paracaídas pasivo) — subir exige aletear de verdad. Con la
+// calibración anterior el techo era 0.93·G: NINGUNA política podía volar.
 //
 // EVOLUCIÓN: hill-climbing con mutación gaussiana annealed (σ 0.35→0.05) sobre
 // el genotipo plano del transformer. Tres etapas — caminar, saltar, volar —
 // cada una contra su fantasma y su viento. En «volar» la aptitud lleva forma:
-// 0.7·exp(−d/8) + 0.3·altitud — cada centímetro de altura sostenida mejora la
-// nota aunque el fantasma quede lejos, así el gradiente hacia volar existe
-// desde la primera evaluación. Los candidatos se evalúan en la rejilla barata
-// (cfg.ev) a 30 Hz con el fluido a 15 Hz.
+// 0.65·exp(−d/12) + 0.35·altitud — cada centímetro de altura sostenida mejora
+// la nota aunque el fantasma quede lejos, así el gradiente hacia volar existe
+// desde la primera evaluación (medido: sin volar 0.08, aleteo lento 0.19,
+// vuelo real 0.39; el goal 0.32 solo lo cruza quien vuela de verdad).
+// Los candidatos se evalúan en la rejilla barata (cfg.ev) a 30 Hz con el
+// fluido a 15 Hz.
 (function () {
   'use strict';
   var H = (window.__HERO__ = window.__HERO__ || {});
@@ -186,15 +187,18 @@
   }
 
   // ---------------- etapas y viento ----------------
+  // Los fantasmas viven DENTRO del envolvente físico medido: el de saltar no
+  // pide más altura de la que alcanza el impulso de salto, y el de volar no
+  // pide un techo que ningún aleteo sostiene.
   var STAGES = [
     { id: 'walk', label: 'caminar', goal: 0.9, minEvals: 900,
       ghost: function (t) { return [50 + 22 * Math.sin(t * 0.25), 0]; },
       wind: function (t) { return [1.5 * Math.sin(t * 0.3), 0]; } },
     { id: 'hop', label: 'saltar', goal: 0.72, minEvals: 900,
-      ghost: function (t) { return [50 + 18 * Math.sin(t * 0.3), Math.abs(Math.sin(t * 1.1)) * 8]; },
+      ghost: function (t) { return [50 + 18 * Math.sin(t * 0.3), Math.abs(Math.sin(t * 1.1)) * 5]; },
       wind: function (t) { return [2.5 * Math.sin(t * 0.35), 0.8 * Math.sin(t * 0.7)]; } },
-    { id: 'fly', label: 'volar', goal: 0.42, minEvals: 1400,
-      ghost: function (t) { return [50 + 30 * Math.sin(t * 0.45), 20 + 14 * Math.sin(t * 0.8 + 1)]; },
+    { id: 'fly', label: 'volar', goal: 0.32, minEvals: 1400,
+      ghost: function (t) { return [50 + 22 * Math.sin(t * 0.45), 16 + 9 * Math.sin(t * 0.8 + 1)]; },
       wind: function (t) { return [6 * Math.sin(t * 0.4), 3 * Math.sin(t * 0.23 + 2)]; } }
   ];
 
@@ -221,11 +225,13 @@
       var g = st.ghost(t);
       var d = stepBird(b, pol, g[0], g[1], f, false);
       if (!isFinite(d)) return 0;
-      var term = Math.exp(-d / 8);
+      var term;
       if (st.id === 'fly') {
         // forma de la aptitud: la altitud sostenida puntúa aunque el fantasma
         // quede lejos — el gradiente hacia volar existe desde el primer salto.
-        term = 0.7 * term + 0.3 * H.clamp((b.y - 1) / 14, 0, 1);
+        term = 0.65 * Math.exp(-d / 12) + 0.35 * H.clamp((b.y - 1) / 11, 0, 1);
+      } else {
+        term = Math.exp(-d / 8);
       }
       fit += term;
       if (s % 2 === 0) {
