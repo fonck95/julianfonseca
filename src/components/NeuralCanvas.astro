@@ -87,149 +87,151 @@
     }
   `;
 
-  const canvas = document.getElementById('neural') as HTMLCanvasElement | null;
-  if (!canvas) return;
+  function boot(canvas: HTMLCanvasElement) {
+    const state = { mx: 0.5, my: 0.5, tx: 0.5, ty: 0.5 };
+    const track = (e: PointerEvent) => {
+      const r = canvas.getBoundingClientRect();
+      state.tx = (e.clientX - r.left) / r.width;
+      state.ty = 1 - (e.clientY - r.top) / r.height;
+    };
+    window.addEventListener('pointermove', track, { passive: true });
 
-  const state = { mx: 0.5, my: 0.5, tx: 0.5, ty: 0.5 };
-  const track = (e: PointerEvent) => {
-    const r = canvas.getBoundingClientRect();
-    state.tx = (e.clientX - r.left) / r.width;
-    state.ty = 1 - (e.clientY - r.top) / r.height;
-  };
-  window.addEventListener('pointermove', track, { passive: true });
+    const fit = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(canvas.clientWidth * dpr);
+      canvas.height = Math.round(canvas.clientHeight * dpr);
+    };
 
-  const fit = () => {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.round(canvas.clientWidth * dpr);
-    canvas.height = Math.round(canvas.clientHeight * dpr);
-  };
+    async function initWebGPU(): Promise<boolean> {
+      if (!('gpu' in navigator)) return false;
+      try {
+        const adapter = await (navigator as any).gpu.requestAdapter();
+        if (!adapter) return false;
+        const device = await adapter.requestDevice();
+        const ctx = canvas.getContext('webgpu') as any;
+        if (!ctx) return false;
+        const format = (navigator as any).gpu.getPreferredCanvasFormat();
+        fit();
+        ctx.configure({ device, format, alphaMode: 'opaque' });
 
-  async function initWebGPU(): Promise<boolean> {
-    if (!('gpu' in navigator)) return false;
-    try {
-      const adapter = await (navigator as any).gpu.requestAdapter();
-      if (!adapter) return false;
-      const device = await adapter.requestDevice();
-      const ctx = canvas!.getContext('webgpu') as any;
-      if (!ctx) return false;
-      const format = (navigator as any).gpu.getPreferredCanvasFormat();
-      fit();
-      ctx.configure({ device, format, alphaMode: 'opaque' });
-
-      const module = device.createShaderModule({ code: WGSL });
-      const pipeline = device.createRenderPipeline({
-        layout: 'auto',
-        vertex: { module },
-        fragment: { module, targets: [{ format }] },
-        primitive: { topology: 'triangle-list' },
-      });
-
-      const buf = device.createBuffer({
-        size: 32,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      });
-      const bind = device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [{ binding: 0, resource: { buffer: buf } }],
-      });
-
-      const data = new ArrayBuffer(32);
-      const f32 = new Float32Array(data);
-      let start = performance.now();
-
-      window.addEventListener('resize', () => { fit(); }, { passive: true });
-
-      const frame = () => {
-        state.mx += (state.tx - state.mx) * 0.06;
-        state.my += (state.ty - state.my) * 0.06;
-        const t = (performance.now() - start) / 1000;
-        f32[0] = canvas!.width; f32[1] = canvas!.height;
-        f32[2] = t;
-        f32[4] = state.mx; f32[5] = state.my;
-        device.queue.writeBuffer(buf, 0, data);
-
-        const enc = device.createCommandEncoder();
-        const pass = enc.beginRenderPass({
-          colorAttachments: [{
-            view: ctx.getCurrentTexture().createView(),
-            clearValue: { r: 0.02, g: 0.03, b: 0.06, a: 1 },
-            loadOp: 'clear',
-            storeOp: 'store',
-          }],
+        const module = device.createShaderModule({ code: WGSL });
+        const pipeline = device.createRenderPipeline({
+          layout: 'auto',
+          vertex: { module },
+          fragment: { module, targets: [{ format }] },
+          primitive: { topology: 'triangle-list' },
         });
-        pass.setPipeline(pipeline);
-        pass.setBindGroup(0, bind);
-        pass.draw(3);
-        pass.end();
-        device.queue.submit([enc.finish()]);
-        requestAnimationFrame(frame);
-      };
-      requestAnimationFrame(frame);
-      return true;
-    } catch {
-      return false;
-    }
-  }
 
-  // Fallback: campo de nodos en canvas 2D para navegadores sin WebGPU
-  function initFallback() {
-    fit();
-    const c2 = canvas!.getContext('2d')!;
-    const nodes: { x: number; y: number; vx: number; vy: number; hue: number }[] = [];
-    const N = 46;
-    for (let i = 0; i < N; i++) {
-      nodes.push({
-        x: Math.random(), y: Math.random(),
-        vx: (Math.random() - 0.5) * 0.0006, vy: (Math.random() - 0.5) * 0.0006,
-        hue: Math.random() < 0.5 ? 351 : 197,
-      });
-    }
-    const draw = () => {
-      const W = canvas!.width, H = canvas!.height;
-      c2.fillStyle = '#06080f';
-      c2.fillRect(0, 0, W, H);
-      for (const n of nodes) {
-        n.x += n.vx; n.y += n.vy;
-        if (n.x < 0 || n.x > 1) n.vx *= -1;
-        if (n.y < 0 || n.y > 1) n.vy *= -1;
+        const buf = device.createBuffer({
+          size: 32,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        const bind = device.createBindGroup({
+          layout: pipeline.getBindGroupLayout(0),
+          entries: [{ binding: 0, resource: { buffer: buf } }],
+        });
+
+        const data = new ArrayBuffer(32);
+        const f32 = new Float32Array(data);
+        const start = performance.now();
+
+        window.addEventListener('resize', () => { fit(); }, { passive: true });
+
+        const frame = () => {
+          state.mx += (state.tx - state.mx) * 0.06;
+          state.my += (state.ty - state.my) * 0.06;
+          const t = (performance.now() - start) / 1000;
+          f32[0] = canvas.width; f32[1] = canvas.height;
+          f32[2] = t;
+          f32[4] = state.mx; f32[5] = state.my;
+          device.queue.writeBuffer(buf, 0, data);
+
+          const enc = device.createCommandEncoder();
+          const pass = enc.beginRenderPass({
+            colorAttachments: [{
+              view: ctx.getCurrentTexture().createView(),
+              clearValue: { r: 0.02, g: 0.03, b: 0.06, a: 1 },
+              loadOp: 'clear',
+              storeOp: 'store',
+            }],
+          });
+          pass.setPipeline(pipeline);
+          pass.setBindGroup(0, bind);
+          pass.draw(3);
+          pass.end();
+          device.queue.submit([enc.finish()]);
+          requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+        return true;
+      } catch {
+        return false;
       }
+    }
+
+    // Fallback: campo de nodos en canvas 2D para navegadores sin WebGPU
+    function initFallback() {
+      fit();
+      const c2 = canvas.getContext('2d')!;
+      const nodes: { x: number; y: number; vx: number; vy: number; hue: number }[] = [];
+      const N = 46;
       for (let i = 0; i < N; i++) {
-        for (let j = i + 1; j < N; j++) {
-          const a = nodes[i], b = nodes[j];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < 0.16) {
-            c2.strokeStyle = `hsla(${a.hue}, 90%, 65%, ${(0.16 - d) * 1.4})`;
-            c2.lineWidth = 1;
+        nodes.push({
+          x: Math.random(), y: Math.random(),
+          vx: (Math.random() - 0.5) * 0.0006, vy: (Math.random() - 0.5) * 0.0006,
+          hue: Math.random() < 0.5 ? 351 : 197,
+        });
+      }
+      const draw = () => {
+        const W = canvas.width, H = canvas.height;
+        c2.fillStyle = '#06080f';
+        c2.fillRect(0, 0, W, H);
+        for (const n of nodes) {
+          n.x += n.vx; n.y += n.vy;
+          if (n.x < 0 || n.x > 1) n.vx *= -1;
+          if (n.y < 0 || n.y > 1) n.vy *= -1;
+        }
+        for (let i = 0; i < N; i++) {
+          for (let j = i + 1; j < N; j++) {
+            const a = nodes[i], b = nodes[j];
+            const d = Math.hypot(a.x - b.x, a.y - b.y);
+            if (d < 0.16) {
+              c2.strokeStyle = `hsla(${a.hue}, 90%, 65%, ${(0.16 - d) * 1.4})`;
+              c2.lineWidth = 1;
+              c2.beginPath();
+              c2.moveTo(a.x * W, a.y * H);
+              c2.lineTo(b.x * W, b.y * H);
+              c2.stroke();
+            }
+          }
+        }
+        for (const n of nodes) {
+          c2.fillStyle = `hsla(${n.hue}, 90%, 68%, 0.85)`;
+          c2.beginPath();
+          c2.arc(n.x * W, n.y * H, 1.8, 0, Math.PI * 2);
+          c2.fill();
+        }
+        // puntero
+        const mx = state.mx * W, my = (1 - state.my) * H;
+        for (const n of nodes) {
+          const d = Math.hypot(n.x * W - mx, n.y * H - my);
+          if (d < 140) {
+            c2.strokeStyle = `hsla(351, 95%, 68%, ${(140 - d) / 700})`;
             c2.beginPath();
-            c2.moveTo(a.x * W, a.y * H);
-            c2.lineTo(b.x * W, b.y * H);
+            c2.moveTo(mx, my);
+            c2.lineTo(n.x * W, n.y * H);
             c2.stroke();
           }
         }
-      }
-      for (const n of nodes) {
-        c2.fillStyle = `hsla(${n.hue}, 90%, 68%, 0.85)`;
-        c2.beginPath();
-        c2.arc(n.x * W, n.y * H, 1.8, 0, Math.PI * 2);
-        c2.fill();
-      }
-      // puntero
-      const mx = state.mx * W, my = (1 - state.my) * H;
-      for (const n of nodes) {
-        const d = Math.hypot(n.x * W - mx, n.y * H - my);
-        if (d < 140) {
-          c2.strokeStyle = `hsla(351, 95%, 68%, ${(140 - d) / 700})`;
-          c2.beginPath();
-          c2.moveTo(mx, my);
-          c2.lineTo(n.x * W, n.y * H);
-          c2.stroke();
-        }
-      }
+        requestAnimationFrame(draw);
+      };
+      window.addEventListener('resize', fit, { passive: true });
       requestAnimationFrame(draw);
-    };
-    window.addEventListener('resize', fit, { passive: true });
-    requestAnimationFrame(draw);
+    }
+
+    initWebGPU().then((ok) => { if (!ok) initFallback(); });
   }
 
-  initWebGPU().then((ok) => { if (!ok) initFallback(); });
+  const canvas = document.getElementById('neural');
+  if (canvas instanceof HTMLCanvasElement) boot(canvas);
 </script>
