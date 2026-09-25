@@ -102,7 +102,11 @@
     b.wingLv += (wCmd - b.wingL) * wingStiff * DT - b.wingLv * 2.8 * DT;
     b.wingRv += (wCmd - b.wingR) * wingStiff * DT - b.wingRv * 2.8 * DT;
     b.wingL += b.wingLv * DT; b.wingR += b.wingRv * DT;
-    var foldCmd = b.grounded ? 0 : Math.max(0, cmd4);
+    // plegado: reflejo de carrera ascendente (física: subir el ala extendida
+    // empuja el ave hacia abajo) + ajuste fino aprendido por la política.
+    var wRateF = (b.wingLv + b.wingRv) * 0.5;
+    var foldReflex = H.clamp(-wRateF * 0.45, 0, 1);
+    var foldCmd = b.grounded ? 0 : H.clamp(0.7 * foldReflex + 0.6 * Math.max(0, cmd4), 0, 1);
     b.foldV += (foldCmd - b.fold) * 24 * DT - b.foldV * 8 * DT;
     b.fold += b.foldV * DT;
     b.fold = H.clamp(b.fold, 0, 1);
