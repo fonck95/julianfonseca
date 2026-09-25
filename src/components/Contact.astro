@@ -1,0 +1,64 @@
+---
+import Icon from './Icon.astro';
+
+const GITHUB = 'https://github.com/fonck95';
+---
+
+<section class="section contact" id="contacto">
+  <div class="wrap">
+    <div class="cta-box reveal">
+      <span class="eyebrow">Contacto</span>
+      <h2>Tu proyecto merece más que un chatbot</h2>
+      <p class="lead" style="margin-inline:auto">
+        Cuéntame qué proceso quieres automatizar, qué conocimiento quieres hacer consultable
+        o qué experiencia quieres que corra en tiempo real en el navegador.
+      </p>
+      <div class="actions">
+        <a class="btn btn-main" href="mailto:hola@julianfonseca.dev?subject=Proyecto%20de%20IA">
+          <Icon name="mail" size={17} /> hola@julianfonseca.dev
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/fonck95" target="_blank" rel="noopener">
+          <Icon name="github" size={17} /> github.com/fonck95
+        </a>
+      </div>
+      <p class="where"><Icon name="pin" size={15} /> Bucaramanga, Colombia · Trabajo remoto en cualquier zona horaria</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <span>© {new Date().getFullYear()} Julián Fonseca · Ingeniero Biomédico &amp; Arquitecto de IA</span>
+    <span class="built">Esta página corre un shader <code>WGSL</code> sobre <code>WebGPU</code> · Construida con Astro</span>
+  </div>
+</footer>
+
+<style>
+  .contact {
+    background:
+      radial-gradient(ellipse 60% 50% at 50% 110%, rgba(255, 91, 115, 0.12), transparent 70%),
+      var(--bg);
+    border-top: 1px solid var(--line);
+  }
+  .cta-box {
+    text-align: center; max-width: 720px; margin-inline: auto;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .cta-box h2 { margin: 16px 0 14px; }
+  .cta-box .lead { margin-inline: auto; }
+  .actions { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 34px; }
+  .where {
+    margin-top: 26px; color: var(--muted); font-size: 0.85rem;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .where :global(svg) { color: var(--pink); }
+  footer { border-top: 1px solid var(--line); padding: 26px 0; }
+  .foot {
+    display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+    color: var(--muted); font-size: 0.83rem;
+  }
+  .built code { color: var(--cyan); font-size: 0.8rem; }
+  @media (max-width: 640px) {
+    .foot { flex-direction: column; text-align: center; }
+  }
+</style>

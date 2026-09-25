@@ -1,0 +1,47 @@
+---
+const groups = [
+  { label: 'Lenguajes', items: ['JavaScript', 'TypeScript', 'Node.js', 'Python', 'SQL'] },
+  { label: 'IA', items: ['LLMs', 'Prompting', 'Orquestación', 'Embeddings', 'RAG', 'Jev / TypeSafe', 'Fine-tuning'] },
+  { label: 'Integración', items: ['APIs REST', 'GraphQL', 'Webhooks', 'MCP', 'Streaming SSE', 'OAuth'] },
+  { label: 'Frontier web', items: ['WebGPU', 'WGSL', 'Astro', 'React', 'Web Components', 'Canvas / WebGL'] },
+];
+---
+
+<section class="section" id="stack">
+  <div class="wrap">
+    <div class="reveal">
+      <span class="eyebrow">Stack</span>
+      <h2>Las herramientas del oficio</h2>
+      <p class="lead">Tecnologías que uso a diario en producción, no en tutoriales.</p>
+    </div>
+    <div class="groups">
+      {groups.map((g, i) => (
+        <div class="group reveal" style={`transition-delay:${i * 80}ms`}>
+          <h3>{g.label}</h3>
+          <div class="chips">
+            {g.items.map((it) => <span class="chip">{it}</span>)}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .groups {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 34px; margin-top: 48px;
+  }
+  .group h3 {
+    font-size: 0.78rem; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--gold); font-weight: 600; margin-bottom: 16px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    border: 1px solid var(--line); background: var(--panel);
+    border-radius: 999px; padding: 7px 15px;
+    font-size: 0.85rem; color: var(--text);
+    transition: border-color 0.2s, color 0.2s, transform 0.2s;
+  }
+  .chip:hover { border-color: var(--cyan); color: var(--cyan); transform: translateY(-1px); }
+</style>

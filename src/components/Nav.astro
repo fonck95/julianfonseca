@@ -1,0 +1,56 @@
+---
+import Icon from './Icon.astro';
+const base = import.meta.env.BASE_URL;
+---
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href={base}>
+      <svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M14 48V31c0-6.5 4.2-11 9.5-11S33 24.5 33 31v17" fill="none" stroke="#FF5B73" stroke-width="5.5" stroke-linecap="round"/>
+        <path d="M31 48V31c0-6.5 4.2-11 9.5-11S50 24.5 50 31v17" fill="none" stroke="#59d7ff" stroke-width="5.5" stroke-linecap="round"/>
+      </svg>
+      <span>julián<em>fonseca</em></span>
+    </a>
+    <nav class="links" aria-label="Secciones">
+      <a href={base + '#servicios'}>Servicios</a>
+      <a href={base + '#metodo'}>Método</a>
+      <a href={base + '#stack'}>Stack</a>
+      <a href={base + '#sobre-mi'}>Sobre mí</a>
+    </nav>
+    <a class="btn btn-main nav-cta" href={base + '#contacto'}>Contactar <Icon name="arrow" size={16} /></a>
+  </div>
+</header>
+
+<style>
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    background: rgba(6, 8, 15, 0.55);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 24px; height: 68px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-display); font-weight: 700; font-size: 1.05rem;
+  }
+  .brand em { font-style: normal; color: var(--pink); }
+  .links { display: flex; gap: 28px; }
+  .links a {
+    color: var(--muted); font-size: 0.92rem; font-weight: 500;
+    transition: color 0.15s; position: relative;
+  }
+  .links a::after {
+    content: ''; position: absolute; left: 0; bottom: -6px;
+    width: 0; height: 1.5px; background: var(--pink); transition: width 0.2s;
+  }
+  .links a:hover { color: var(--text); }
+  .links a:hover::after { width: 100%; }
+  .nav-cta { padding: 10px 20px; font-size: 0.88rem; }
+  @media (max-width: 860px) {
+    .links { display: none; }
+  }
+</style>

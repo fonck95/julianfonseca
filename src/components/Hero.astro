@@ -1,0 +1,98 @@
+---
+import NeuralCanvas from './NeuralCanvas.astro';
+import Icon from './Icon.astro';
+const base = import.meta.env.BASE_URL;
+---
+
+<section class="hero">
+  <NeuralCanvas />
+  <div class="hero-veil" aria-hidden="true"></div>
+  <div class="wrap hero-inner">
+    <p class="kicker">
+      <span class="live-dot" aria-hidden="true"></span>
+      Bucaramanga, Colombia · Disponible para proyectos
+    </p>
+    <h1>Julián<br /><span class="grad">Fonseca</span></h1>
+    <p class="role">
+      <strong>Ingeniero Biomédico</strong> y arquitecto de inteligencia artificial.
+      Convierto modelos en productos que trabajan: <strong>agentes de IA</strong>, sistemas que
+      <strong> recuerdan</strong> y experiencias que corren <strong>en la GPU del navegador</strong>.
+    </p>
+    <div class="cta">
+      <a class="btn btn-main" href={base + '#servicios'}>Ver servicios <Icon name="arrow" size={17} /></a>
+      <a class="btn btn-ghost" href={base + '#contacto'}>Hablemos de tu proyecto</a>
+    </div>
+    <p class="hero-note">
+      <Icon name="spark" size={15} />
+      Lo que se mueve detrás de este texto no es un vídeo: es un campo neuronal generado en tiempo real con
+      <code>WebGPU</code> y <code>WGSL</code> en tu propia máquina, y sigue a tu cursor.
+      Así trabajo: la tecnología no la cuento, la demuestro.
+    </p>
+  </div>
+  <div class="hero-metrics wrap">
+    <div class="metric"><strong>60 fps</strong><span>cómputo en el navegador</span></div>
+    <div class="metric"><strong>100%</strong><span>código a medida, sin plantillas</span></div>
+    <div class="metric"><strong>1×1</strong><span>trato directo, sin intermediarios</span></div>
+  </div>
+</section>
+
+<style>
+  .hero { position: relative; min-height: 100svh; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+  .hero-veil {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 50%, rgba(6, 8, 15, 0.72), transparent 70%),
+      linear-gradient(180deg, rgba(6,8,15,0.5) 0%, transparent 30%, var(--bg) 100%);
+  }
+  .hero-inner { position: relative; z-index: 2; padding: 130px 0 40px; }
+  .kicker {
+    display: inline-flex; align-items: center; gap: 10px;
+    border: 1px solid var(--line); background: rgba(11, 15, 28, 0.6);
+    padding: 7px 16px; border-radius: 999px;
+    color: var(--muted); font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase;
+    font-family: var(--font-display);
+  }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--pink); box-shadow: 0 0 14px var(--pink);
+    animation: pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  h1 {
+    font-size: clamp(3rem, 8vw, 5.6rem); font-weight: 800;
+    margin: 26px 0 10px; letter-spacing: -0.03em;
+  }
+  .grad {
+    background: linear-gradient(100deg, var(--pink) 10%, var(--gold) 50%, var(--cyan) 90%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .role {
+    font-size: clamp(1.05rem, 2.2vw, 1.3rem); color: var(--muted); max-width: 660px;
+  }
+  .role strong { color: var(--text); font-weight: 600; }
+  .cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 36px; }
+  .hero-note {
+    margin-top: 30px; font-size: 0.86rem; color: var(--muted); max-width: 600px;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .hero-note :global(svg) { flex-shrink: 0; margin-top: 4px; color: var(--gold); }
+  .hero-note code {
+    color: var(--cyan); background: rgba(89, 215, 255, 0.08);
+    padding: 1px 7px; border-radius: 6px; font-size: 0.82rem;
+  }
+  .hero-metrics {
+    position: relative; z-index: 2; display: flex; gap: 40px; flex-wrap: wrap;
+    padding: 34px 0 46px; border-top: 1px solid var(--line);
+    margin-top: 48px; width: min(1120px, 100% - 48px);
+  }
+  .metric { display: flex; flex-direction: column; }
+  .metric strong {
+    font-family: var(--font-display); font-size: 1.35rem; font-weight: 700;
+    background: linear-gradient(95deg, #fff, var(--cyan));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .metric span { color: var(--muted); font-size: 0.83rem; }
+  @media (max-width: 600px) {
+    .hero-metrics { gap: 22px; }
+  }
+</style>
