@@ -3,9 +3,10 @@
 // Física 2D mínima (cuerpo, dos patas, dos alas) y un MLP 8→10→4 (tanh) que
 // decide cada articulación. El cerebro se entrena por neuroevolución: se muta
 // el campeón de la etapa, se simula la variante contra una trayectoria
-// fantasma y se conserva la que mejor la sigue. Al dominar una etapa (fitness
-// umbral), el mismo cerebro pasa a la siguiente — no se reinicia: lo aprendido
-// caminando es la base de lo que vendrá. Todo corre en la CPU del navegador.
+// fantasma y se conserva la que mejor la sigue. Al dominar una etapa (aptitud
+// meta + tiempo mínimo para que se vea progresar), el mismo cerebro pasa a la
+// siguiente — no se reinicia: lo aprendido caminando es la base de lo que
+// vendrá. Todo corre en la CPU del navegador.
 
 export const DT = 1 / 60;
 export const WORLD = { w: 100, h: 40 };
@@ -101,17 +102,22 @@ function stepBody(b: Body, net: Net, tx: number, ty: number): number {
 
 // ---------------------------------------------------------------------------
 // Etapas del currículo: caminar → saltar → volar
+//
+// `goal` es la aptitud necesaria para pasar (fracción de tiempo pegado al
+// fantasma) y `minEvals` el número mínimo de simulaciones antes de poder
+// ascender: sin ese suelo la primera variante con suerte «gana» la etapa en
+// medio segundo y el visitante no ve aprender nada.
 // ---------------------------------------------------------------------------
 export interface Stage {
   id: string; label: string;
   ghost: (t: number) => [number, number];
-  goal: number;
+  goal: number; minEvals: number;
 }
 
 export const STAGES: Stage[] = [
-  { id: 'walk', label: 'caminar', ghost: (t) => [50 + 22 * Math.sin(t * 0.25), 0], goal: 0.85 },
-  { id: 'hop', label: 'saltar', ghost: (t) => [50 + 18 * Math.sin(t * 0.3), Math.abs(Math.sin(t * 1.1)) * 8], goal: 0.6 },
-  { id: 'fly', label: 'volar', ghost: (t) => [50 + 30 * Math.sin(t * 0.45), 20 + 14 * Math.sin(t * 0.8 + 1)], goal: 0.45 },
+  { id: 'walk', label: 'caminar', ghost: (t) => [50 + 22 * Math.sin(t * 0.25), 0], goal: 0.92, minEvals: 1300 },
+  { id: 'hop', label: 'saltar', ghost: (t) => [50 + 18 * Math.sin(t * 0.3), Math.abs(Math.sin(t * 1.1)) * 8], goal: 0.78, minEvals: 1300 },
+  { id: 'fly', label: 'volar', ghost: (t) => [50 + 30 * Math.sin(t * 0.45), 20 + 14 * Math.sin(t * 0.8 + 1)], goal: 0.45, minEvals: 1300 },
 ];
 
 export function evaluate(net: Net, ghost: (t: number) => [number, number], secs: number): number {
@@ -129,7 +135,7 @@ export function evaluate(net: Net, ghost: (t: number) => [number, number], secs:
 // Evolucionador: colina ascendiente con mutaciones, por etapas
 // ---------------------------------------------------------------------------
 export interface Evolver {
-  champ: Net; stage: number; gen: number; inGen: number;
+  champ: Net; stage: number; stageEvals: number; inGen: number;
   best: number; evals: number; history: number[]; mastered: boolean[];
 }
 
@@ -138,33 +144,33 @@ const POP = 8;
 export function createEvolver(): Evolver {
   const champ = createNet();
   return {
-    champ, stage: 0, gen: 0, inGen: 0,
+    champ, stage: 0, stageEvals: 0, inGen: 0,
     best: evaluate(champ, STAGES[0].ghost, 4),
     evals: 0, history: [], mastered: [false, false, false],
   };
 }
 
-export function evolveStep(ev: Evolver, budget: number): void {
+export function evolveStep(ev: Evolver, budget = 1): void {
   for (let i = 0; i < budget; i++) {
     const st = STAGES[ev.stage];
-    const cand = mutateNet(cloneNet(ev.champ), 0.3 - 0.2 * (ev.inGen / POP));
+    const cand = mutateNet(cloneNet(ev.champ), 0.45 - 0.3 * (ev.inGen / POP));
     const f = evaluate(cand, st.ghost, 5);
     ev.evals++;
+    ev.stageEvals++;
     ev.inGen++;
     if (f > ev.best) { ev.best = f; ev.champ = cand; }
     if (ev.inGen >= POP) {
       ev.inGen = 0;
-      ev.gen++;
       ev.history.push(ev.best);
       if (ev.history.length > 150) ev.history.shift();
     }
   }
   const st = STAGES[ev.stage];
-  if (ev.best >= st.goal && !ev.mastered[ev.stage]) {
+  if (ev.best >= st.goal && ev.stageEvals >= st.minEvals && !ev.mastered[ev.stage]) {
     ev.mastered[ev.stage] = true;
     if (ev.stage < STAGES.length - 1) {
       ev.stage++;
-      ev.gen = 0;
+      ev.stageEvals = 0;
       ev.inGen = 0;
       ev.best = evaluate(ev.champ, STAGES[ev.stage].ghost, 4);
     }
