@@ -12,31 +12,39 @@
 //   D = q·(C_D0 + C_Lmax·sin²α)     resistencia, opuesta a e
 //   F = L·n − D·e
 //
-// S_eff = S·(1 − 0.7·plegado): al subir el ala se pliega (menos superficie,
-// menos sustentación parásita hacia abajo). Sin plegado el aleteo simétrico
-// da fuerza NETA cero; con plegado asimétrico el downstroke domina — como un
-// ave de verdad. Newton III: el aire recibe −F en el punto del panel
-// (downwash y vórtices que el propio fluido transporta después).
+// S_eff = S·(1 − 0.7·plegado). El plegado combina un REFLEJO físico (el ala se
+// pliega sola en la carrera ascendente, proporcional a −wRate: subir el ala
+// extendida empujaría el ave hacia abajo) con un ajuste fino que aprende la
+// política. Sin esa asimetría el aleteo simétrico da fuerza NETA casi cero.
+// Newton III: el aire recibe −F en el punto del panel (downwash y vórtices que
+// el propio fluido transporta después).
 //
-// Unidades: 1 unidad de mundo = 1 cm. QS = ½ρ·(cm/m)²/m convierte v²·S a
-// aceleración en unidades/s², comparable con G (verificado: aleteo máximo
-// ≈ 1.8·G — volar exige optimizar, no es gratis ni imposible).
+// CALIBRACIÓN (verificada headless): con G=12.5, cuerda 2.8 cm, C_L=2.2 y
+// actuadores de ala a 40/2.8 rad/s², un aleteo bien sincronizado produce
+// ≈1.4·G de sustentación media (trepa); con alas quietas el ave cae despacio
+// (0.85·G de paracaídas pasivo) — subir exige aletear de verdad. Con la
+// calibración anterior el techo era 0.93·G: NINGUNA política podía volar.
 //
 // EVOLUCIÓN: hill-climbing con mutación gaussiana annealed (σ 0.35→0.05) sobre
 // el genotipo plano del transformer. Tres etapas — caminar, saltar, volar —
-// cada una contra su fantasma y su viento. Los candidatos se evalúan en la
-// rejilla barata (cfg.ev) a 30 Hz con el fluido a 15 Hz.
+// cada una contra su fantasma y su viento. En «volar» la aptitud lleva forma:
+// 0.65·exp(−d/12) + 0.35·altitud — cada centímetro de altura sostenida mejora
+// la nota aunque el fantasma quede lejos, así el gradiente hacia volar existe
+// desde la primera evaluación (medido: sin volar 0.08, aleteo lento 0.19,
+// vuelo real 0.39; el goal 0.32 solo lo cruza quien vuela de verdad).
+// Los candidatos se evalúan en la rejilla barata (cfg.ev) a 30 Hz con el
+// fluido a 15 Hz.
 (function () {
   'use strict';
   var H = (window.__HERO__ = window.__HERO__ || {});
 
   var DT = H.DT;
-  var G = 21.6;                 // gravedad del mundo (comprimida ×2.2)
+  var G = 12.5;                 // gravedad del mundo (comprimida, calibrada)
   var RHO = 1.2;                // densidad del aire kg/m³
-  var CL_MAX = 1.5, CD0 = 0.45, CD_BODY = 0.9;
+  var CL_MAX = 2.2, CD0 = 0.45, CD_BODY = 0.9;
   var WING_LEN = 3.5;           // semienvergadura (unidades ≈ cm)
   var PANELS = 4;
-  var PANEL_S = (WING_LEN / PANELS) * 1.4;   // cm² por panel
+  var PANEL_S = (WING_LEN / PANELS) * 2.8;   // cm² por panel (cuerda 2.8 cm)
   var S_BODY = 2.4;                          // cm² frontal del cuerpo
   var MASS = 0.069;             // kg (~69 g, un gorrión)
   // ½ρ·(cm→m)²/m : v²[unidades²/s²]·S[cm²] → aceleración [unidades/s²]
@@ -88,19 +96,25 @@
     b.legLv += (cmdLegL * 1.1 - b.legL) * legStiff * DT - b.legLv * 6 * DT;
     b.legRv += (cmdLegR * 1.1 - b.legR) * legStiff * DT - b.legRv * 6 * DT;
     b.legL += b.legLv * DT; b.legR += b.legRv * DT;
-    var wingStiff = 30;
-    var wCmd = 0.75 + cmdWing * 0.75;
-    b.wingLv += (wCmd - b.wingL) * wingStiff * DT - b.wingLv * 3.2 * DT;
-    b.wingRv += (wCmd - b.wingR) * wingStiff * DT - b.wingRv * 3.2 * DT;
+    // actuadores de ala rápidos: sin esto el transformer no puede batir a la
+    // frecuencia que hace falta para generar sustentación (medido headless).
+    var wingStiff = 40;
+    var wCmd = 0.75 + cmdWing * 0.95;
+    b.wingLv += (wCmd - b.wingL) * wingStiff * DT - b.wingLv * 2.8 * DT;
+    b.wingRv += (wCmd - b.wingR) * wingStiff * DT - b.wingRv * 2.8 * DT;
     b.wingL += b.wingLv * DT; b.wingR += b.wingRv * DT;
-    var foldCmd = b.grounded ? 0 : Math.max(0, cmd4);
+    // plegado: reflejo de carrera ascendente (física: subir el ala extendida
+    // empuja el ave hacia abajo) + ajuste fino aprendido por la política.
+    var wRateF = (b.wingLv + b.wingRv) * 0.5;
+    var foldReflex = H.clamp(-wRateF * 0.45, 0, 1);
+    var foldCmd = b.grounded ? 0 : H.clamp(0.7 * foldReflex + 0.6 * Math.max(0, cmd4), 0, 1);
     b.foldV += (foldCmd - b.fold) * 24 * DT - b.foldV * 8 * DT;
     b.fold += b.foldV * DT;
     b.fold = H.clamp(b.fold, 0, 1);
 
     // ---- salto (solo en tierra; cmd4 > 0.75) ----
     if (b.grounded && cmd4 > 0.75) {
-      b.vy += 6.5 * cmd4; b.y = 0.05; b.grounded = false;
+      b.vy += 13 * cmd4; b.y = 0.05; b.grounded = false;
     }
 
     // ---- patas: empuje por fricción cuando tocan ----
@@ -161,6 +175,7 @@
       b.grounded = false;
     }
     b.x = H.clamp(b.x, 2, 98);
+    b.y = Math.min(b.y, 44);   // techo blando: el mundo visible acaba en 40
     b.ph += DT * 4;
 
     if (!isFinite(b.x) || !isFinite(b.y) || !isFinite(b.vx) || !isFinite(b.vy)) {
@@ -172,15 +187,18 @@
   }
 
   // ---------------- etapas y viento ----------------
+  // Los fantasmas viven DENTRO del envolvente físico medido: el de saltar no
+  // pide más altura de la que alcanza el impulso de salto, y el de volar no
+  // pide un techo que ningún aleteo sostiene.
   var STAGES = [
     { id: 'walk', label: 'caminar', goal: 0.9, minEvals: 900,
       ghost: function (t) { return [50 + 22 * Math.sin(t * 0.25), 0]; },
       wind: function (t) { return [1.5 * Math.sin(t * 0.3), 0]; } },
     { id: 'hop', label: 'saltar', goal: 0.72, minEvals: 900,
-      ghost: function (t) { return [50 + 18 * Math.sin(t * 0.3), Math.abs(Math.sin(t * 1.1)) * 8]; },
+      ghost: function (t) { return [50 + 18 * Math.sin(t * 0.3), Math.abs(Math.sin(t * 1.1)) * 5]; },
       wind: function (t) { return [2.5 * Math.sin(t * 0.35), 0.8 * Math.sin(t * 0.7)]; } },
-    { id: 'fly', label: 'volar', goal: 0.42, minEvals: 900,
-      ghost: function (t) { return [50 + 30 * Math.sin(t * 0.45), 20 + 14 * Math.sin(t * 0.8 + 1)]; },
+    { id: 'fly', label: 'volar', goal: 0.32, minEvals: 1400,
+      ghost: function (t) { return [50 + 22 * Math.sin(t * 0.45), 16 + 9 * Math.sin(t * 0.8 + 1)]; },
       wind: function (t) { return [6 * Math.sin(t * 0.4), 3 * Math.sin(t * 0.23 + 2)]; } }
   ];
 
@@ -207,7 +225,15 @@
       var g = st.ghost(t);
       var d = stepBird(b, pol, g[0], g[1], f, false);
       if (!isFinite(d)) return 0;
-      fit += Math.exp(-d / 8);
+      var term;
+      if (st.id === 'fly') {
+        // forma de la aptitud: la altitud sostenida puntúa aunque el fantasma
+        // quede lejos — el gradiente hacia volar existe desde el primer salto.
+        term = 0.65 * Math.exp(-d / 12) + 0.35 * H.clamp((b.y - 1) / 11, 0, 1);
+      } else {
+        term = Math.exp(-d / 8);
+      }
+      fit += term;
       if (s % 2 === 0) {
         var w = st.wind(t);
         f.wind[0] = w[0]; f.wind[1] = w[1];
