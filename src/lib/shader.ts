@@ -1,7 +1,8 @@
 // Shader WGSL del hero: campo neuronal de fondo + pájaro dibujado con SDF.
 // Uniforms (64 bytes): res@0 time@8 mouse@16 agent@24 goal@32 energy@40
 // conv@44 wing@48 legL@52 legR@56 grounded@60
-// Nota: agent y goal llegan YA escalados por aspecto desde JS; mouse no.
+// Nota: agent y goal llegan YA escalados por aspecto desde JS (x) y en y-up;
+// aquí se invierte el eje y porque frag.xy crece hacia abajo.
 export const WGSL = /* wgsl */ `
 struct Uniforms {
   res: vec2f, time: f32, mouse: vec2f,
@@ -57,9 +58,10 @@ fn sdSeg(p: vec2f, a: vec2f, b: vec2f) -> f32 {
   let asp = u.res.x / u.res.y;
   var p = vec2f(uv.x * asp, uv.y);
   let t = u.time;
-  let m = vec2f(u.mouse.x * asp, u.mouse.y);
-  let A = u.agent;
-  let GO = u.goal;
+  // eje y: JS manda coordenadas y-up; el framebuffer crece hacia abajo
+  let m = vec2f(u.mouse.x * asp, 1.0 - u.mouse.y);
+  let A = vec2f(u.agent.x, 1.0 - u.agent.y);
+  let GO = vec2f(u.goal.x, 1.0 - u.goal.y);
   let e = u.energy;
   let conv = u.conv;
 
@@ -82,9 +84,9 @@ fn sdSeg(p: vec2f, a: vec2f, b: vec2f) -> f32 {
   col += vec3f(0.4, 0.8, 1.0) * pull * 0.12;
   col += vec3f(1.0, 0.42, 0.52) * (0.004 / (dm * dm + 0.02)) * 0.05;
 
-  // suelo sutil: la criatura camina sobre él en las primeras etapas
-  let gy0 = A.y - 0.055;
-  col += vec3f(0.30, 0.45, 0.66) * exp(-max(p.y - gy0, 0.0) * 30.0) * (1.0 - conv) * 0.05;
+  // suelo sutil bajo la criatura en las etapas terrestres (y crece hacia abajo)
+  let gy0 = A.y + 0.055;
+  col += vec3f(0.30, 0.45, 0.66) * exp(-max(gy0 - p.y, 0.0) * 30.0) * (1.0 - conv) * 0.05;
   col += vec3f(0.55, 0.72, 0.95) * smoothstep(0.0016, 0.0, abs(p.y - gy0)) * 0.07 * (1.0 - conv);
 
   // color de aprendizaje: rosa mientras lo intenta, cian cuando domina
@@ -112,6 +114,9 @@ fn sdSeg(p: vec2f, a: vec2f, b: vec2f) -> f32 {
   let beak = sdSeg(p, head + vec2f(f * 0.008, 0.0), head + vec2f(f * 0.020, -0.003));
   col += vec3f(1.0, 0.78, 0.35) * smoothstep(0.0035, 0.0, beak) * 0.85;
 
+  // ojo
+  col += vec3f(0.04) * smoothstep(0.0028, 0.0012, length(p - (head + vec2f(f * 0.004, 0.003))));
+
   // cola
   let tail = sdSeg(p, A - vec2f(f * 0.024, 0.0), A - vec2f(f * 0.052, 0.010 + sin(t * 1.5) * 0.004));
   col += learnCol * smoothstep(0.008, 0.002, tail) * 0.45;
@@ -137,16 +142,16 @@ fn sdSeg(p: vec2f, a: vec2f, b: vec2f) -> f32 {
   col += legCol * smoothstep(0.0038, 0.0, length(p - footL)) * 0.7;
   col += legCol * smoothstep(0.0038, 0.0, length(p - footR)) * 0.5;
 
-  // impulso de salto: destello bajo las patas al despegar
+  // impulso de salto: destello bajo las patas mientras está en el aire
   let dJ = length(p - (hip + vec2f(0.0, -0.03)));
-  col += legCol * exp(-dJ / 0.02) * 0.5 * u.jump * (1.0 - u.grounded);
+  col += legCol * exp(-dJ / 0.02) * 0.4 * (1.0 - u.grounded) * (0.4 + 0.6 * e);
 
   // objetivo: anillo dorado que respira; se cierra al acercarse
   let dgl = length(p - GO);
   let rr = mix(0.05, 0.018, conv) + 0.006 * sin(t * 3.0) * (1.0 - conv);
   col += vec3f(1.0, 0.78, 0.35) * smoothstep(0.004, 0.0, abs(dgl - rr)) * (0.55 - 0.3 * conv);
   let crossG = min(abs(p.x - GO.x), abs(p.y - GO.y));
-  let inBox = step(abs(p.x - GO.x) / asp, 0.012) * step(abs(p.y - GO.y), 0.012);
+  let inBox = step(abs(p.x - GO.x), 0.012 * asp) * step(abs(p.y - GO.y), 0.012);
   col += vec3f(1.0, 0.78, 0.35) * smoothstep(0.0025, 0.0, crossG) * inBox * 0.5 * (1.0 - conv);
 
   // línea de error punteada: se apaga al dominar
