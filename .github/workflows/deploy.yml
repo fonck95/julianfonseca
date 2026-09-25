@@ -20,6 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: withastro/action@v3
+        with:
+          # Sin lockfile en el repo, la acción exige declarar el gestor;
+          # si no, falla con "No lockfile found" antes de compilar nada.
+          package-manager: npm
   deploy:
     needs: build
     runs-on: ubuntu-latest
