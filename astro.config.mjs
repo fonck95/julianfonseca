@@ -4,7 +4,9 @@ import { defineConfig } from 'astro/config';
 // en GitHub Pages vive bajo /julianfonseca; en `npm run dev` desde la raíz
 // (si no, localhost:PUERTO/ devuelve 404 HTML y los módulos fallan por MIME).
 const onRailway = !!process.env.RAILWAY_ENVIRONMENT;
-const isDev = process.env.npm_lifecycle_event === 'dev';
+const isDev =
+  process.env.npm_lifecycle_event === 'dev' ||
+  process.env.NODE_ENV === 'development';
 
 // `site` solo se declara si es una URL válida: Astro falla el build con
 // "Invalid url" si no lo es, y en Railway RAILWAY_STATIC_URL puede venir
