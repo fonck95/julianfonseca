@@ -1,0 +1,49 @@
+---
+const steps = [
+  { n: '01', t: 'Diagnóstico', d: 'Entiendo el proceso real, no el que está en el PowerPoint. Defino qué problema vale la pena automatizar y con qué métrica se sabrá que funcionó.' },
+  { n: '02', t: 'Prototipo vivo', d: 'En días, no en meses: un prototipo funcional que ya puedes tocar y criticar. La arquitectura se decide con evidencia, no con moda.' },
+  { n: '03', t: 'Ingeniería seria', d: 'Construcción con TypeScript, pipelines de evaluación, manejo de errores y límites de costo. Lo que separa una demo de un producto.' },
+  { n: '04', t: 'Despliegue y evolución', d: 'Puesta en producción, monitoreo y mejora continua con datos de uso. Te entrego documentación y el conocimiento para operarlo.' },
+];
+---
+
+<section class="section alt" id="metodo">
+  <div class="wrap">
+    <div class="reveal">
+      <span class="eyebrow">Método</span>
+      <h2>Cómo trabajo</h2>
+      <p class="lead">Cuatro fases, una regla: cada semana ves avance tangible.</p>
+    </div>
+    <div class="steps">
+      {steps.map((s, i) => (
+        <div class="step reveal" style={`transition-delay:${i * 90}ms`}>
+          <span class="n">{s.n}</span>
+          <h3>{s.t}</h3>
+          <p>{s.d}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .alt { background: var(--bg-soft); border-block: 1px solid var(--line); }
+  .steps {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 18px; margin-top: 48px; counter-reset: step;
+  }
+  .step {
+    position: relative; padding: 28px 24px; border-radius: var(--radius);
+    border: 1px solid var(--line); background: rgba(255,255,255,0.02);
+    transition: opacity 0.7s ease, transform 0.7s ease, border-color 0.25s;
+  }
+  .step:hover { border-color: var(--pink); }
+  .n {
+    font-family: var(--font-display); font-size: 2.4rem; font-weight: 800;
+    background: linear-gradient(180deg, rgba(255,91,115,0.9), rgba(255,91,115,0.12));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    display: block; margin-bottom: 12px; line-height: 1;
+  }
+  .step h3 { font-size: 1.05rem; margin-bottom: 8px; font-weight: 650; }
+  .step p { color: var(--muted); font-size: 0.9rem; }
+</style>

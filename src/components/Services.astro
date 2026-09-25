@@ -1,0 +1,90 @@
+---
+import Icon from './Icon.astro';
+
+const services = [
+  {
+    icon: 'agent',
+    title: 'Agentes de IA para tareas específicas',
+    text: 'Agentes enfocados que automatizan un proceso concreto: clasificar, responder, extraer datos, generar reportes. Alcance acotado, resultados medibles, costo predecible.',
+  },
+  {
+    icon: 'compass',
+    title: 'Agentes de uso general',
+    text: 'Asistentes autónomos con herramientas, memoria y capacidad de actuar sobre tus sistemas. Planifican, ejecutan y verifican. Un empleado digital, no un chatbot.',
+  },
+  {
+    icon: 'book',
+    title: 'RAG y embeddings',
+    text: 'Tus manuales, historias y bases de conocimiento convertidos en búsqueda semántica. Respuestas fundamentadas con cita a la fuente, sin alucinaciones.',
+  },
+  {
+    icon: 'plug',
+    title: 'Integraciones API y MCP',
+    text: 'Conecto modelos con el mundo real: APIs REST/GraphQL, webhooks y Model Context Protocol, para que tu IA use tus herramientas con permisos y auditoría.',
+  },
+  {
+    icon: 'scale',
+    title: 'Juicio calibrado con Jev',
+    text: 'Decisiones tipadas con probabilidades calibradas (TypeSafe): evaluar calidad, clasificar y medir sin generar texto. IA que sabe cuánto sabe.',
+  },
+  {
+    icon: 'cube',
+    title: 'Experiencias y cómputo WebGPU',
+    text: 'Gráficos y simulaciones en tiempo real en el navegador: visualización científica, gemelos digitales e interfaces vivas. Esta página es una muestra.',
+  },
+] as const;
+---
+
+<section class="section" id="servicios">
+  <div class="wrap">
+    <div class="reveal">
+      <span class="eyebrow">Servicios</span>
+      <h2>Inteligencia que produce resultados</h2>
+      <p class="lead">Del prototipo a producción: diseño, construyo y despliego sistemas de IA completos, con la ingeniería alrededor que los hace confiables.</p>
+    </div>
+    <div class="grid">
+      {services.map((s, i) => (
+        <article class="card reveal" style={`transition-delay:${i * 70}ms`}>
+          <span class="ico"><Icon name={s.icon} size={26} /></span>
+          <h3>{s.title}</h3>
+          <p>{s.text}</p>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 18px; margin-top: 48px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 30px 28px;
+    position: relative; overflow: hidden;
+    transition: border-color 0.25s, transform 0.25s, background 0.25s, opacity 0.7s ease;
+  }
+  .card:hover {
+    border-color: var(--line-strong); transform: translateY(-4px);
+    background: var(--panel-hover);
+  }
+  .card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--pink), transparent);
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .card:hover::before { opacity: 1; }
+  .ico {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 52px; height: 52px; border-radius: 14px; margin-bottom: 18px;
+    background: var(--pink-soft); color: var(--pink);
+    border: 1px solid rgba(255, 91, 115, 0.25);
+  }
+  .card:nth-child(even) .ico {
+    background: rgba(89, 215, 255, 0.1); color: var(--cyan);
+    border-color: rgba(89, 215, 255, 0.22);
+  }
+  .card h3 { font-size: 1.08rem; font-weight: 650; margin-bottom: 10px; }
+  .card p { color: var(--muted); font-size: 0.93rem; }
+</style>
