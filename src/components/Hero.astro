@@ -16,7 +16,7 @@ const base = import.meta.env.BASE_URL;
     <p class="role">
       <strong>Ingeniero Biomédico</strong> y arquitecto de inteligencia artificial.
       Convierto modelos en productos que trabajan: <strong>agentes de IA</strong>, sistemas que
-      <strong> recuerdan</strong> y experiencias que corren <strong>en la GPU del navegador</strong>.
+      <strong>recuerdan</strong> y experiencias que corren <strong>en la GPU del navegador</strong>.
     </p>
     <div class="cta">
       <a class="btn btn-main" href={base + '#servicios'}>Ver servicios <Icon name="arrow" size={17} /></a>
@@ -24,14 +24,17 @@ const base = import.meta.env.BASE_URL;
     </div>
     <p class="hero-note">
       <Icon name="spark" size={15} />
-      Lo que se mueve detrás de este texto no es un vídeo: es un campo neuronal generado en tiempo real con
-      <code>WebGPU</code> y <code>WGSL</code> en tu propia máquina, y sigue a tu cursor.
-      Así trabajo: la tecnología no la cuento, la demuestro.
+      El punto de luz no está animado: es una <strong>red neuronal real</strong> (MLP 5→8→2)
+      entrenándose ahora mismo en tu navegador con <code>backpropagation</code> — la CPU calcula
+      cada paso de gradiente y la GPU pinta el resultado con <code>WebGPU</code>.
+      Al cargar la página no sabe nada: explora, se pasa, oscila. En segundos <strong>aprende a
+      seguir tu cursor</strong>; muévelo rápido y la verás readaptarse. Mira su error caer en el
+      panel. Así trabajo: la tecnología no la cuento, la demuestro.
     </p>
   </div>
   <div class="hero-metrics wrap">
     <div class="metric"><strong>60 fps</strong><span>cómputo en el navegador</span></div>
-    <div class="metric"><strong>100%</strong><span>código a medida, sin plantillas</span></div>
+    <div class="metric"><strong>MLP 5→8→2</strong><span>aprendiendo en vivo</span></div>
     <div class="metric"><strong>1×1</strong><span>trato directo, sin intermediarios</span></div>
   </div>
 </section>
@@ -75,6 +78,7 @@ const base = import.meta.env.BASE_URL;
     margin-top: 30px; font-size: 0.86rem; color: var(--muted); max-width: 600px;
     display: flex; gap: 10px; align-items: flex-start;
   }
+  .hero-note strong { color: var(--text); font-weight: 600; }
   .hero-note :global(svg) { flex-shrink: 0; margin-top: 4px; color: var(--gold); }
   .hero-note code {
     color: var(--cyan); background: rgba(89, 215, 255, 0.08);
@@ -92,7 +96,13 @@ const base = import.meta.env.BASE_URL;
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
   .metric span { color: var(--muted); font-size: 0.83rem; }
-  @media (max-width: 600px) {
+  @media (max-width: 900px) {
+    /* el HUD de telemetría vive abajo a la derecha: deja sitio para que no tape las métricas */
+    .hero { padding-bottom: 250px; }
     .hero-metrics { gap: 22px; }
+    .hero-note { max-width: 100%; }
+  }
+  @media (max-width: 420px) {
+    .hero { padding-bottom: 220px; }
   }
 </style>
