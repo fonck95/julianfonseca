@@ -3,43 +3,46 @@
 // AERODINÁMICA POR PANELES (blade element, Ellington 1984; régimen de ave
 // pequeña, Re ≈ 10³). En cada panel del ala:
 //
-//   e = (ux, uy)  dirección del movimiento del panel RELATIVO al aire que
-//                 resuelve Navier–Stokes en ese punto (viento + estela propia)
-//   sinα = −uy , cosα = |ux|        ángulo de ataque de la cuerda (horizontal)
-//   L = q·C_Lmax·sinα·cosα          sustentación, ⊥ al flujo, n = (−uy, ux)
+//   v_rel = v_panel + v_ave − u(x)   velocidad del panel contra el aire que
+//                                    resuelve Navier–Stokes ahí (viento + estela)
+//   e = v_rel/|v_rel|               dirección del flujo relativo
+//   sinα = −e_y , cosα = |e_x|      ángulo de ataque de la cuerda (horizontal)
+//   q = ½ρ·|v_rel|²·S_eff/m         presión dinámica por unidad de masa
+//   L = q·C_Lmax·sinα·cosα          sustentación, ⊥ al flujo: n = (−e_y, e_x)
 //   D = q·(C_D0 + C_Lmax·sin²α)     resistencia, opuesta a e
-//   q = ½ρ·v_rel²·S/m               presión dinámica (en unidades del mundo)
+//   F = L·n − D·e
 //
-// F_panel = L·n − D·e. Verificado por construcción: aleteo hacia abajo →
-// empuje hacia arriba; avance → arrastre atrás; planeo con α>0 → sustentación.
-// Newton III: el aire recibe −F en el punto del panel (downwash y vórtices que
-// el propio fluido transporta después).
+// S_eff = S·(1 − 0.7·plegado): al subir el ala se pliega (menos superficie,
+// menos sustentación parásita hacia abajo). Sin plegado el aleteo simétrico
+// da fuerza NETA cero; con plegado asimétrico el downstroke domina — como un
+// ave de verdad. Newton III: el aire recibe −F en el punto del panel
+// (downwash y vórtices que el propio fluido transporta después).
 //
-// El cuerpo arrastra como esfera (C_D ≈ 0.9) contra el aire relativo.
-// Patas: empuje por fricción en contacto y rebote inelástico contra el suelo.
+// Unidades: 1 unidad de mundo = 1 cm. QS = ½ρ·(cm/m)²/m convierte v²·S a
+// aceleración en unidades/s², comparable con G (verificado: aleteo máximo
+// ≈ 1.8·G — volar exige optimizar, no es gratis ni imposible).
 //
 // EVOLUCIÓN: hill-climbing con mutación gaussiana annealed (σ 0.35→0.05) sobre
 // el genotipo plano del transformer. Tres etapas — caminar, saltar, volar —
-// cada una contra su fantasma y su viento: brisa suave en tierra, ráfagas
-// cruzadas en el aire. Los candidatos se evalúan en la rejilla barata (cfg.ev)
-// a 30 Hz con el fluido a 15 Hz; el campeón visible corre en la rejilla cara.
+// cada una contra su fantasma y su viento. Los candidatos se evalúan en la
+// rejilla barata (cfg.ev) a 30 Hz con el fluido a 15 Hz.
 (function () {
   'use strict';
   var H = (window.__HERO__ = window.__HERO__ || {});
 
   var DT = H.DT;
-  var G = 21.6;                 // gravedad del mundo (comprimida ×2.2, como antes)
+  var G = 21.6;                 // gravedad del mundo (comprimida ×2.2)
   var RHO = 1.2;                // densidad del aire kg/m³
   var CL_MAX = 1.5, CD0 = 0.45, CD_BODY = 0.9;
   var WING_LEN = 3.5;           // semienvergadura (unidades ≈ cm)
   var PANELS = 4;
-  var PANEL_S = (WING_LEN / PANELS) * 1.4;
-  var S_BODY = 2.4;
-  var MASS = 0.028;             // kg (~28 g, un gorrión)
+  var PANEL_S = (WING_LEN / PANELS) * 1.4;   // cm² por panel
+  var S_BODY = 2.4;                          // cm² frontal del cuerpo
+  var MASS = 0.069;             // kg (~69 g, un gorrión)
+  // ½ρ·(cm→m)²/m : v²[unidades²/s²]·S[cm²] → aceleración [unidades/s²]
+  var QS = 0.5 * RHO * H.CM * H.CM / (MASS * H.CM);
   var LEG_LEN = 1.0;
-  // ½ρ·(unidades→m)²/m : convierte v²·S del mundo a aceleración sobre el ave
-  var QS = 0.5 * RHO * H.CM * H.CM / MASS;
-  var REACT = 26;               // ganancia de la reacción al fluido (aire visible)
+  var REACT = 0.8;              // ganancia de la reacción al fluido visible
   var TMP = [0, 0];
 
   function Bird(x) {
@@ -47,6 +50,8 @@
     this.vx = 0; this.vy = 0;
     this.wingL = 0.6; this.wingR = 0.6;
     this.wingLv = 0; this.wingRv = 0;
+    this.fold = 0;              // plegado actual [0..1]
+    this.foldV = 0;
     this.legL = 0; this.legR = 0;
     this.legLv = 0; this.legRv = 0;
     this.ph = 0; this.grounded = true;
@@ -54,10 +59,10 @@
     this.airV = [0, 0];
   }
 
-  // Un paso de física. `pol` = transformer (lee pol.feat, llama pol.forward);
-  // `fluid` = viento resuelto; `inject` = si la reacción vuelve al campo.
+  // Un paso de física. `pol` = transformer; `fluid` = viento resuelto;
+  // `inject` = si la reacción vuelve al campo (visible: true; evolución: false).
   function stepBird(b, pol, tx, ty, fluid, inject) {
-    var i, s, c;
+    var i;
 
     // ---- tokens del transformer ----
     var air = fluid.sample(b.x, b.y + 1.2, b.airV);
@@ -74,9 +79,11 @@
     f4[0] = b.legR; f4[1] = b.legRv * 3; f4[2] = b.grounded && Math.cos(b.legR) > 0.5 ? 1 : 0;
 
     var o = pol.forward(pol.feat);
-    var cmdLegL = o[0], cmdLegR = o[1], cmdWing = o[2], cmdJump = (o[3] + 1) * 0.5;
+    var cmdLegL = o[0], cmdLegR = o[1], cmdWing = o[2];
+    // 4ª salida: en tierra es el impulso de salto; en el aire es el plegado.
+    var cmd4 = o[3];
 
-    // ---- actuadores con inercia (las articulaciones no teletransportan) ----
+    // ---- actuadores con inercia ----
     var legStiff = 22;
     b.legLv += (cmdLegL * 1.1 - b.legL) * legStiff * DT - b.legLv * 6 * DT;
     b.legRv += (cmdLegR * 1.1 - b.legR) * legStiff * DT - b.legRv * 6 * DT;
@@ -86,37 +93,43 @@
     b.wingLv += (wCmd - b.wingL) * wingStiff * DT - b.wingLv * 3.2 * DT;
     b.wingRv += (wCmd - b.wingR) * wingStiff * DT - b.wingRv * 3.2 * DT;
     b.wingL += b.wingLv * DT; b.wingR += b.wingRv * DT;
+    var foldCmd = b.grounded ? 0 : Math.max(0, cmd4);
+    b.foldV += (foldCmd - b.fold) * 24 * DT - b.foldV * 8 * DT;
+    b.fold += b.foldV * DT;
+    b.fold = H.clamp(b.fold, 0, 1);
 
-    // ---- salto ----
-    if (b.grounded && cmdJump > 0.75) {
-      b.vy += 6.5 * cmdJump; b.y = 0.05; b.grounded = false;
+    // ---- salto (solo en tierra; cmd4 > 0.75) ----
+    if (b.grounded && cmd4 > 0.75) {
+      b.vy += 6.5 * cmd4; b.y = 0.05; b.grounded = false;
     }
 
     // ---- patas: empuje por fricción cuando tocan ----
     if (b.y < LEG_LEN * Math.cos(b.legL) + 0.05) b.vx += -b.legLv * 0.55;
     if (b.y < LEG_LEN * Math.cos(b.legR) + 0.05) b.vx += -b.legRv * 0.55;
 
-    // ---- aerodinámica de las alas ----
+    // ---- aerodinámica de las alas (solo fuera del suelo) ----
     var fxT = 0, fyT = 0;
-    if (!b.grounded || b.y > 0.05) {
+    if (b.y > 0.05 || !b.grounded) {
       var dirX = b.vx >= 0 ? 1 : -1;
       var wAng = (b.wingL + b.wingR) * 0.5;
       var wRate = (b.wingLv + b.wingRv) * 0.5;
+      var sEff = PANEL_S * (1 - 0.7 * b.fold);   // superficie efectiva
       for (i = 0; i < PANELS; i++) {
         var frac = (i + 0.5) / PANELS;
         var px = b.x - dirX * frac * WING_LEN * 0.45;
         var py = b.y + 0.8 + frac * WING_LEN * Math.sin(wAng);
-        var pvy = wRate * frac * WING_LEN * Math.cos(wAng); // velocidad de aleteo
-        var pv = fluid.sample(px, py, TMP);
-        // movimiento del panel relativo al aire
-        var rvx = -pv[0], rvy = pvy - pv[1];
+        // velocidad del panel: aleteo (vertical) + traslación del cuerpo
+        var pvx = b.vx, pvy = b.vy + wRate * frac * WING_LEN * Math.cos(wAng);
+        var pu = fluid.sample(px, py, TMP);
+        // movimiento relativo al aire
+        var rvx = pvx - pu[0], rvy = pvy - pu[1];
         var vRel = Math.hypot(rvx, rvy);
         if (vRel < 0.05) continue;
         var ux = rvx / vRel, uy = rvy / vRel;
-        s = -uy; c = Math.abs(ux);          // sinα, cosα
-        var q = QS * vRel * vRel * PANEL_S;
-        var lF = q * CL_MAX * s * c;
-        var dF = q * (CD0 + CL_MAX * s * s);
+        var sa = -uy, ca = Math.abs(ux);        // sinα, cosα
+        var q = QS * vRel * vRel * sEff;
+        var lF = q * CL_MAX * sa * ca;
+        var dF = q * (CD0 + CL_MAX * sa * sa);
         var Fx = lF * (-uy) - dF * ux;
         var Fy = lF * ux - dF * uy;
         fxT += Fx; fyT += Fy;
@@ -152,7 +165,7 @@
 
     if (!isFinite(b.x) || !isFinite(b.y) || !isFinite(b.vx) || !isFinite(b.vy)) {
       b.x = 50; b.y = 0; b.vx = 0; b.vy = 0; b.wingLv = 0; b.wingRv = 0;
-      b.legLv = 0; b.legRv = 0;
+      b.legLv = 0; b.legRv = 0; b.fold = 0; b.foldV = 0;
       return Infinity; // aptitud 0: el candidato se descarta solo
     }
     return Math.hypot(tx - b.x, ty - b.y);
@@ -184,7 +197,7 @@
 
   Evolver.POP = 8;
 
-  // Avalúa un candidato en la rejilla barata: ave a 30 Hz, fluido a 15 Hz.
+  // Evalúa un candidato en la rejilla barata: ave a 30 Hz, fluido a 15 Hz.
   Evolver.prototype.evaluate = function (pol, stageIdx, secs) {
     var st = STAGES[stageIdx === undefined ? this.stage : stageIdx];
     var b = new Bird(50), f = this.fev, dt2 = DT * 2;
@@ -238,8 +251,8 @@
   };
 
   // Paso de la escena visible: viento ambiente + fluido + ave del campeón.
-  // La reacción de las alas SÍ vuelve al campo aquí (inject = true): la estela
-  // que ves es la que el ave dejó de verdad.
+  // La reacción de las alas SÍ vuelve al campo aquí: la estela que ves es la
+  // que el ave dejó de verdad.
   Evolver.prototype.tickVisible = function (tWorld, tgt, windFn) {
     var f = this.fvis;
     var w = windFn(tWorld);
