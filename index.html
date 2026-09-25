@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Julián Fonseca — Servicios Web e Inteligencia Artificial</title>
+<meta name="description" content="Ingeniero biomédico y arquitecto de IA en Bucaramanga. Agentes de IA, RAG, MCP, integraciones API y experiencias WebGPU.">
+<style>
+:root{
+  --bg:#070912; --panel:#0d1120; --line:#1c2338;
+  --text:#e8ecf8; --muted:#9aa3bf;
+  --pink:#FF5B73; --cyan:#59d7ff; --gold:#ffc46b;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;line-height:1.6}
+a{color:var(--cyan);text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+/* ---------- HERO ---------- */
+.hero{position:relative;min-height:92vh;display:flex;align-items:center;overflow:hidden}
+#gpu{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hero::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,var(--bg) 100%);pointer-events:none}
+.hero-inner{position:relative;z-index:2;padding:80px 0}
+.kicker{display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);background:rgba(13,17,32,.72);backdrop-filter:blur(6px);
+  padding:6px 14px;border-radius:999px;color:var(--muted);font-size:.85rem;letter-spacing:.06em;text-transform:uppercase}
+.kicker .dot{width:8px;height:8px;border-radius:50%;background:var(--pink);box-shadow:0 0 12px var(--pink);animation:pulse 2.2s infinite}
+@keyframes pulse{50%{opacity:.35}}
+h1{font-size:clamp(2.4rem,6vw,4.4rem);line-height:1.08;margin:22px 0 6px;font-weight:800;
+  background:linear-gradient(100deg,#fff 20%,var(--pink) 55%,var(--cyan) 90%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.role{font-size:clamp(1.05rem,2.4vw,1.45rem);color:var(--muted);max-width:640px}
+.role strong{color:var(--text);font-weight:600}
+.cta{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.btn{padding:13px 26px;border-radius:12px;font-weight:600;font-size:.98rem;transition:transform .15s,box-shadow .15s}
+.btn:hover{transform:translateY(-2px)}
+.btn-main{background:linear-gradient(95deg,var(--pink),#ff8a6b);color:#fff;box-shadow:0 6px 28px rgba(255,91,115,.35)}
+.btn-ghost{border:1px solid var(--line);color:var(--text);background:rgba(13,17,32,.6)}
+.hero-note{margin-top:26px;font-size:.85rem;color:var(--muted);max-width:560px}
+.hero-note code{color:var(--cyan);background:rgba(89,215,255,.08);padding:1px 6px;border-radius:6px;font-size:.82rem}
+
+/* ---------- SECCIONES ---------- */
+section{padding:88px 0}
+.tag{color:var(--pink);font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:.8rem}
+h2{font-size:clamp(1.7rem,3.6vw,2.4rem);margin:10px 0 14px;font-weight:750}
+.lead{color:var(--muted);max-width:720px;margin-bottom:44px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px;position:relative;overflow:hidden;transition:border-color .2s,transform .2s}
+.card:hover{border-color:var(--pink);transform:translateY(-3px)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--pink),var(--cyan));opacity:.7}
+.card .ico{font-size:1.6rem;margin-bottom:12px;display:block}
+.card h3{font-size:1.12rem;margin-bottom:8px}
+.card p{color:var(--muted);font-size:.93rem}
+
+/* ---------- STACK ---------- */
+.stack{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+.chip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:8px 18px;font-size:.9rem;color:var(--text)}
+.chip b{color:var(--gold);font-weight:600}
+
+/* ---------- SOBRE ---------- */
+.about{display:grid;grid-template-columns:1.2fr .8fr;gap:36px;align-items:start}
+@media(max-width:820px){.about{grid-template-columns:1fr}}
+.about p{color:var(--muted);margin-bottom:14px}
+.quote{border-left:3px solid var(--pink);padding:18px 22px;background:var(--panel);border-radius:0 14px 14px 0;font-style:italic;color:var(--text)}
+
+/* ---------- CONTACTO ---------- */
+.contact{background:linear-gradient(180deg,transparent,rgba(255,91,115,.06));border-top:1px solid var(--line)}
+footer{border-top:1px solid var(--line);padding:26px 0;color:var(--muted);font-size:.85rem;text-align:center}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <canvas id="gpu" aria-hidden="true"></canvas>
+  <div class="wrap hero-inner">
+    <span class="kicker"><span class="dot"></span> Bucaramanga, Colombia · Disponible para proyectos</span>
+    <h1>Julián Fonseca</h1>
+    <p class="role"><strong>Ingeniero Biomédico</strong> · Arquitecto de Inteligencia Artificial.<br>
+    Convierto modelos en productos: agentes que trabajan, sistemas que recuerdan y experiencias que corren en la GPU del navegador.</p>
+    <div class="cta">
+      <a class="btn btn-main" href="#servicios">Ver servicios</a>
+      <a class="btn btn-ghost" href="#contacto">Hablemos de tu proyecto</a>
+    </div>
+    <p class="hero-note">Lo que estás viendo detrás de este texto no es un vídeo: es un campo neuronal generado en tiempo real con <code>WebGPU</code> y <code>WGSL</code> en tu propia máquina, y reacciona a tu cursor. Así trabajo: la tecnología no la cuento, la demuestro.</p>
+  </div>
+</header>
+
+<main>
+<section id="servicios">
+  <div class="wrap">
+    <span class="tag">Servicios</span>
+    <h2>Inteligencia que produce resultados</h2>
+    <p class="lead">Del prototipo a producción: diseño, construyo y despliego sistemas de IA completos, con la ingeniería alrededor que los hace confiables.</p>
+    <div class="grid">
+      <div class="card"><span class="ico">🤖</span><h3>Agentes de IA para tareas específicas</h3><p>Agentes enfocados que automatizan un proceso concreto de tu negocio: clasificar, responder, extraer datos, generar reportes. Medibles y acotados.</p></div>
+      <div class="card"><span class="ico">🧭</span><h3>Agentes de uso general</h3><p>Asistentes autónomos con herramientas, memoria y capacidad de navegar y actuar sobre tus sistemas. Un empleado digital, no un chatbot.</p></div>
+      <div class="card"><span class="ico">📚</span><h3>RAG y embeddings</h3><p>Tus documentos, manuales y bases de conocimiento convertidos en un sistema de búsqueda semántica: respuestas con cita, sin alucinaciones.</p></div>
+      <div class="card"><span class="ico">🔌</span><h3>Integraciones API y MCP</h3><p>Conecto LLMs con el mundo real: APIs REST/GraphQL, webhooks y Model Context Protocol para que tus modelos usen tus herramientas.</p></div>
+      <div class="card"><span class="ico">⚖️</span><h3>Jev · decisiones calibradas</h3><p>Evaluación de contenido y decisiones con probabilidades calibradas (TypeSafe): juzgar calidad, clasificar y medir sin generar texto.</p></div>
+      <div class="card"><span class="ico">🎨</span><h3>Experiencias y cómputo WebGPU</h3><p>Gráficos y simulaciones en tiempo real en el navegador: visualización científica, interfaces vivas y demos que venden solas.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="stack">
+  <div class="wrap">
+    <span class="tag">Stack</span>
+    <h2>Las herramientas del oficio</h2>
+    <div class="stack">
+      <span class="chip"><b>JavaScript</b> / TypeScript</span>
+      <span class="chip">Node.js</span>
+      <span class="chip"><b>LLMs</b> — prompting y orquestación</span>
+      <span class="chip"><b>Embeddings</b></span>
+      <span class="chip"><b>RAG</b></span>
+      <span class="chip">APIs REST / GraphQL</span>
+      <span class="chip"><b>MCP</b> — Model Context Protocol</span>
+      <span class="chip"><b>Jev / TypeSafe</b></span>
+      <span class="chip"><b>WebGPU</b> — WGSL</span>
+      <span class="chip">Git / GitHub</span>
+    </div>
+  </div>
+</section>
+
+<section id="sobre">
+  <div class="wrap about">
+    <div>
+      <span class="tag">Sobre mí</span>
+      <h2>Ingeniería biomédica + IA</h2>
+      <p>Soy <strong>Ingeniero Biomédico</strong> de formación: estoy entrenado para entender sistemas complejos —el cuerpo humano, un hospital, un dispositivo— y traducirlos a tecnología que funciona bajo presión.</p>
+      <p>Esa misma disciplina la aplico al software: agentes de IA que no son demos frágiles, sino sistemas con ingeniería alrededor —memoria, evaluación, monitoreo y costos controlados—.</p>
+      <p>Trabajo desde <strong>Bucaramanga, Colombia</strong>, con clientes remotos en cualquier zona horaria.</p>
+    </div>
+    <div class="quote">«Un modelo de IA es un motor. Mi trabajo es construir el vehículo completo: chasis, frenos, tablero y una ruta clara hacia el resultado que necesitas.»</div>
+  </div>
+</section>
+
+<section id="contacto" class="contact">
+  <div class="wrap">
+    <span class="tag">Contacto</span>
+    <h2>¿Tienes un proceso que debería pensar solo?</h2>
+    <p class="lead">Cuéntame qué quieres automatizar, conectar o visualizar. Te respondo con un plan concreto: alcance, tecnología y tiempo.</p>
+    <div class="cta">
+      <a class="btn btn-main" href="https://github.com/fonck95" target="_blank" rel="noopener">GitHub · @fonck95</a>
+      <a class="btn btn-ghost" href="https://github.com/fonck95/julianfonseca" target="_blank" rel="noopener">Ver el código de esta página</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">© 2026 Julián Fonseca · Bucaramanga, Colombia — Esta página corre un shader WGSL/WebGPU en tu navegador.</div>
+</footer>
+
+<script>
+/* ================= HERO WEBGPU: campo neuronal en WGSL ================= */
+const canvas = document.getElementById('gpu');
+let pointer = { x: 0.5, y: 0.4 };
+window.addEventListener('pointermove', (e) => {
+  const r = canvas.getBoundingClientRect();
+  pointer.x = (e.clientX - r.left) / r.width;
+  pointer.y = 1 - (e.clientY - r.top) / r.height;
+});
+
+async function initWebGPU() {
+  if (!navigator.gpu) return false;
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) return false;
+  const device = await adapter.requestDevice();
+  const ctx = canvas.getContext('webgpu');
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  ctx.configure({ device, format, alphaMode: 'opaque' });
+
+  const shaderCode = `
+struct U { time: f32, res: vec2f, pointer: vec2f };
+@group(0) @binding(0) var<uniform> u: U;
+
+@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  return vec4f(p[i], 0.0, 1.0);
+}
+
+fn hash(p: vec2f) -> f32 {
+  return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
+}
+
+@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+  let uv = pos.xy / u.res;
+  let asp = u.res.x / u.res.y;
+  var col = mix(vec3f(0.027, 0.035, 0.075), vec3f(0.05, 0.04, 0.10), uv.y);
+
+  // rejilla de nodos neuronales
+  let scale = 7.0;
+  let g = vec2f(uv.x * asp, uv.y) * scale;
+  let cell = floor(g);
+  for (var dy = -1; dy <= 1; dy++) {
+    for (var dx = -1; dx <= 1; dx++) {
+      let c = cell + vec2f(f32(dx), f32(dy));
+      let h = hash(c);
+      let node = c + vec2f(
+        0.5 + 0.32 * sin(u.time * 0.5 + h * 24.0),
+        0.5 + 0.32 * cos(u.time * 0.43 + h * 17.0)
+      );
+      let d = length(g - node) / scale;
+      let flick = 0.65 + 0.35 * sin(u.time * 1.7 + h * 40.0);
+      // atrae los nodos hacia el puntero
+      let pd = length(vec2f((uv.x - u.pointer.x) * asp, uv.y - u.pointer.y));
+      let glow = exp(-d * 90.0) * flick * (1.0 + 1.6 * exp(-pd * 4.0));
+      col += vec3f(1.0, 0.36, 0.45) * glow * 0.9;               // rosa (#FF5B73)
+      col += vec3f(0.35, 0.84, 1.0) * exp(-d * 260.0) * flick;   // núcleo cian
+    }
+  }
+
+  // halo suave del puntero
+  let pd2 = length(vec2f((uv.x - u.pointer.x) * asp, uv.y - u.pointer.y));
+  col += vec3f(0.35, 0.84, 1.0) * 0.010 / (pd2 * pd2 + 0.02);
+
+  // ondas de fondo (actividad sináptica)
+  let w = sin(uv.x * 14.0 + u.time * 0.6) * cos(uv.y * 10.0 - u.time * 0.4);
+  col += vec3f(0.25, 0.3, 0.9) * max(w, 0.0) * 0.03;
+
+  // viñeta
+  let v = length(uv - 0.5);
+  col *= 1.0 - smoothstep(0.35, 0.95, v) * 0.55;
+
+  return vec4f(col, 1.0);
+}`;
+
+  const module = device.createShaderModule({ code: shaderCode });
+  const bindLayout = device.createBindGroupLayout({
+    entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }]
+  });
+  const pipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [bindLayout] }),
+    vertex: { module, entryPoint: 'vs' },
+    fragment: { module, entryPoint: 'fs', targets: [{ format }] },
+    primitive: { topology: 'triangle-list' }
+  });
+  const buf = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const bindGroup = device.createBindGroup({ layout: bindLayout, entries: [{ binding: 0, resource: { buffer: buf } }] });
+
+  const data = new ArrayBuffer(32);
+  const view = new DataView(data);
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+    canvas.height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const t0 = performance.now();
+  function frame() {
+    resize();
+    const t = (performance.now() - t0) / 1000;
+    view.setFloat32(0, t, true);
+    view.setFloat32(8, canvas.width, true);
+    view.setFloat32(12, canvas.height, true);
+    view.setFloat32(16, pointer.x, true);
+    view.setFloat32(20, pointer.y, true);
+    device.queue.writeBuffer(buf, 0, data);
+
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginRenderPass({
+      colorAttachments: [{ view: ctx.getCurrentTexture().createView(), clearValue: { r: 0.03, g: 0.04, b: 0.08, a: 1 }, loadOp: 'clear', storeOp: 'store' }]
+    });
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(3);
+    pass.end();
+    device.queue.submit([enc.finish()]);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  return true;
+}
+
+initWebGPU().catch(() => {});
+/* Fallback si no hay WebGPU: degradado animado con CSS */
+if (!navigator.gpu) {
+  canvas.style.background = 'radial-gradient(ellipse at 30% 40%, rgba(255,91,115,.28), transparent 55%), radial-gradient(ellipse at 70% 60%, rgba(89,215,255,.18), transparent 55%), #070912';
+}
+</script>
+</body>
+</html>
