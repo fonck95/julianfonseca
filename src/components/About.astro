@@ -1,0 +1,72 @@
+---
+import Icon from './Icon.astro';
+
+const facts = [
+  { icon: 'stethoscope', t: 'Ingeniería Biomédica', d: 'Formado para diseñar tecnología que falla cero veces cuando importa. Rigor clínico aplicado a software.' },
+  { icon: 'brain', t: 'IA aplicada', d: 'Especializado en agentes, RAG y evaluación con juicio calibrado. Sistemas que saben lo que no saben.' },
+  { icon: 'code', t: 'Web de frontier', d: 'WebGPU, shaders y cómputo en el navegador para productos que se ven imposibles.' },
+];
+---
+
+<section class="section alt" id="sobre-mi">
+  <div class="wrap about">
+    <div class="reveal">
+      <span class="eyebrow">Sobre mí</span>
+      <h2>Un ingeniero biomédico<br />que programa máquinas que piensan</h2>
+      <p>Trabajo desde Bucaramanga para clientes de cualquier lugar. Mi formación en ingeniería biomédica me enseñó algo que la mayoría de desarrolladores aprende tarde: <strong>cómo se comporta un sistema complejo bajo presión</strong> — señales ruidosas, datos incompletos y un costo altísimo por cada error.</p>
+      <p>Esa disciplina es la que aplico a la IA. Un agente en producción no es un prompt bonito: es un sistema con memoria, herramientas, límites y evaluación continua. Lo construyo así, y te lo entrego documentado.</p>
+      <blockquote>
+        <p>«No vendo horas de código: vendo sistemas que piensan, recuerdan y actúan — y que siguen funcionando cuando yo no estoy mirando.»</p>
+      </blockquote>
+    </div>
+    <div class="facts">
+      {facts.map((f, i) => (
+        <div class="fact reveal" style={`transition-delay:${i * 90}ms`}>
+          <span class="fico"><Icon name={f.icon as any} size={22} /></span>
+          <div>
+            <h3>{f.t}</h3>
+            <p>{f.d}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .about {
+    display: grid; grid-template-columns: 1.15fr 0.85fr;
+    gap: 56px; align-items: start;
+  }
+  .about p { color: var(--muted); margin-bottom: 16px; }
+  .about h2 { margin-bottom: 22px; }
+  .about p strong, blockquote strong { color: var(--text); font-weight: 600; }
+  blockquote {
+    margin-top: 26px; border-left: 2px solid var(--pink);
+    padding: 6px 0 6px 22px;
+  }
+  blockquote p {
+    font-family: var(--font-display); font-style: italic;
+    font-size: 1.05rem; color: var(--text);
+  }
+  .facts { display: flex; flex-direction: column; gap: 16px; }
+  .fact {
+    display: flex; gap: 16px; padding: 22px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.02);
+    transition: border-color 0.25s, transform 0.25s, opacity 0.7s ease;
+  }
+  .fact:hover { border-color: var(--line-strong); transform: translateX(4px); }
+  .fico {
+    flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--pink-soft); color: var(--pink);
+  }
+  .fact:nth-child(2) .fico { background: rgba(89,215,255,0.1); color: var(--cyan); }
+  .fact:nth-child(3) .fico { background: rgba(255,196,107,0.1); color: var(--gold); }
+  .fact h3 { font-size: 0.98rem; font-weight: 650; margin-bottom: 4px; }
+  .fact p { color: var(--muted); font-size: 0.88rem; }
+  @media (max-width: 880px) {
+    .about { grid-template-columns: 1fr; gap: 40px; }
+  }
+</style>
