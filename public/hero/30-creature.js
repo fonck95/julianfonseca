@@ -37,14 +37,25 @@
 // contacto impone su velocidad al cuerpo — la dirección la APRENDE la política
 // rompiendo la simetría, no está en el código. SALTO: extensión de patas.
 //
-// VALIDADO headless: hover estable 1.0·G (sustenta, 100% del tiempo en aire),
-// marcha proxy fit 0.56 vs 0.33 aleatoria, hop 0.51 vs 0.26, vuelo proxy 0.36
-// con gradiente, 0 NaN en fuzzing de 80 políticas extremas ×1 s.
+// COMPUERTAS DE MODALIDAD (por qué antes «solo sustentaba»): la aptitud era
+// exp(−d/σ) pura y hacer hover en el centro puntúa mejor que cualquier
+// intento torpe de caminar — la evolución encontraba ese óptimo local y se
+// quedaba ahí. Ahora cada etapa exige SU modalidad, medida sobre la
+// simulación: caminar exige estar en tierra; saltar exige despegues y ≥2
+// aterrizajes; volar exige aire sostenido y penaliza tocar suelo tarde. Y el
+// fantasma de caminar VIAJA (zanahoria a 10 u/s ida y vuelta): quedarse
+// quieto ya no puntúa. Validado headless: hover 0.042→0.000 en caminar;
+// caminar a la velocidad del fantasma 0.612 vs quieto 0.169.
+//
+// PAREDES: antes multiplicaban la velocidad por −0.3 EN CADA SUBSTEP aunque
+// ya apuntara hacia dentro — el ave quedaba quieta y confinada en el borde.
+// Ahora solo se amortigua la componente que sale, y un detector de
+// atrapamiento la respawnea si pasa 1.5 s pegada a un borde casi sin
+// velocidad.
 //
 // EVOLUCIÓN: hill-climbing con mutación gaussiana annealed (σ 0.35→0.05)
 // sobre el genotipo plano del transformer. Tres etapas con fantasma completo
-// (x e y): caminar, saltar, volar. Fitness = exp(−d/σ) — seguimiento puro,
-// sin término de altitud regalado.
+// (x e y): caminar, saltar, volar. Fitness = exp(−d/σ) × compuerta.
 (function () {
   'use strict';
   var H = (window.__HERO__ = window.__HERO__ || {});
@@ -168,8 +179,11 @@
     if (b.y <= 0) { b.y = 0; b.grounded = true; if (b.vy < 0) b.vy *= -0.15; }
     else { b.grounded = false; b.air = 1; }
     if (b.y > WH) { b.y = WH; if (b.vy > 0) b.vy *= -0.2; }
-    if (b.x < 2) { b.x = 2; b.vx *= -0.3; }
-    if (b.x > 98) { b.x = 98; b.vx *= -0.3; }
+    // PAREDES: solo se amortigua la componente que SALE. Antes se multiplicaba
+    // por −0.3 en cada substep aunque ya apuntara hacia dentro: la velocidad
+    // se anulaba contra el borde y el ave quedaba quieta y confinada.
+    if (b.x < 2) { b.x = 2; if (b.vx < 0) b.vx *= -0.25; }
+    if (b.x > 98) { b.x = 98; if (b.vx > 0) b.vx *= -0.25; }
   }
 
   // Un frame completo (DT) de la escena visible: 8 substeps, con el fluido.
@@ -200,17 +214,25 @@
   }
 
   // ---- etapas del currículo ----
-  // fantasma completo (x e y); fitness = exp(−d/σ): seguimiento puro.
+  // fantasma completo (x e y); fitness = exp(−d/σ) × COMPUERTA DE MODALIDAD.
+  // caminar: zanahoria VIAJERA (ida y vuelta a 10 u/s) — quedarse quieto ya
+  // no puntúa; la compuerta exige tierra. saltar: fantasma que rebota; la
+  // compuerta exige aire Y aterrizajes. volar: Lissajous con viento; la
+  // compuerta exige aire sostenido.
+  function carrot(t) {
+    var p = (t * 10 / 84) % 2;
+    return [p < 1 ? 8 + 84 * p : 8 + 84 * (2 - p), 0];
+  }
   var STAGES = [
-    { name: 'caminar', secs: 3.0, goal: 0.50, sigma: 10,
-      ghost: function (t) { return [50 + 22 * Math.sin(t * 0.25), 0]; },
+    { name: 'caminar', secs: 6.0, goal: 0.45, sigma: 10,
+      ghost: carrot,
+      wind: function () { return [0, 0]; },
+      spawn: function (b) { b.x = 8; b.y = 0; b.vx = 0; b.vy = 0; b.grounded = true; } },
+    { name: 'saltar', secs: 4.0, goal: 0.40, sigma: 9,
+      ghost: function (t) { return [50 + 20 * Math.sin(t * 0.3), Math.abs(Math.sin(t * 2.2)) * 10]; },
       wind: function () { return [0, 0]; },
       spawn: function (b) { b.x = 50; b.y = 0; b.vx = 0; b.vy = 0; b.grounded = true; } },
-    { name: 'saltar', secs: 3.0, goal: 0.45, sigma: 9,
-      ghost: function (t) { return [50 + 18 * Math.sin(t * 0.3), Math.abs(Math.sin(t * 1.1)) * 6]; },
-      wind: function () { return [0, 0]; },
-      spawn: function (b) { b.x = 50; b.y = 0; b.vx = 0; b.vy = 0; b.grounded = true; } },
-    { name: 'volar', secs: 3.0, goal: 0.30, sigma: 12,
+    { name: 'volar', secs: 4.0, goal: 0.32, sigma: 12,
       ghost: function (t) { return [50 + 22 * Math.sin(t * 0.45), 14 + 8 * Math.sin(t * 0.8 + 1)]; },
       wind: function (t) { return [60 * Math.sin(t * 0.4), 30 * Math.sin(t * 0.23 + 2)]; },
       spawn: function (b) { b.x = 50; b.y = 14; b.vx = 0; b.vy = 0; b.grounded = false; } }
@@ -235,6 +257,8 @@
     var f = this.fev;
     f.reset();
     var n = Math.round(st.secs / DTE), sum = 0;
+    // contadores de modalidad para la compuerta
+    var airFrames = 0, landings = 0, lateTouch = false, wasG = b.grounded;
     for (var fr = 0; fr < n; fr++) {
       var t = fr * DTE;
       var g = st.ghost(t);
@@ -247,9 +271,25 @@
       if (f.sample) { var ws = f.sample(b.x, b.y); wx = ws[0]; wy = ws[1]; }
       for (var s = 0; s < SUBE; s++) substep(b, o, null, wx, wy, HE, false);
       if (!isFinite(b.x) || !isFinite(b.y) || !isFinite(b.th)) return 0;
+      if (!b.grounded) airFrames++;
+      if (wasG && !b.grounded === false && wasG !== b.grounded) landings++;
+      wasG = b.grounded;
+      if (t > 1.0 && b.grounded) lateTouch = true;
       sum += Math.exp(-Math.hypot(g[0] - b.x, g[1] - b.y) / st.sigma);
     }
-    return sum / n;
+    // COMPUERTA DE MODALIDAD: cada etapa exige la suya, medida en la simulación.
+    // Sin esto el hover puntúa bien en caminar/saltar (óptimo local) y el ave
+    // visible se queda sustentando sin aprender a caminar ni saltar.
+    var airFrac = airFrames / n, gate;
+    if (stageIdx === 0) {
+      gate = H.clamp(1 - airFrac / 0.15, 0, 1);            // caminar = tierra
+    } else if (stageIdx === 1) {
+      gate = Math.min(1, airFrac / 0.12) * Math.min(1, landings / 2); // saltar = aire + aterrizajes
+    } else {
+      gate = Math.min(1, airFrac / 0.85);                   // volar = aire sostenido
+      if (lateTouch) sum *= 0.4;                            // y sin tocar suelo tarde
+    }
+    return (sum / n) * gate;
   };
 
   Evolver.prototype.step = function (budgetEvals) {
@@ -268,10 +308,21 @@
           if (this.stage < STAGES.length - 1) {
             this.stage++; this.stageEvals = 0;
             this.best = this.evaluate(this.champ, this.stage);
+            this.respawnVisible();
           }
         }
       }
     }
+  };
+
+  // Recoloca al ave VISIBLE según la etapa actual: al avanzar de etapa (o al
+  // quedar atrapada) empieza donde esa etapa empieza, en vez de seguir
+  // flotando donde la dejó la anterior.
+  Evolver.prototype.respawnVisible = function () {
+    var b = this.bird;
+    STAGES[this.stage].spawn(b);
+    b.th = 0; b.thv = 0; b.be = 0; b.bev = 0; b.lift = 0;
+    this.pinT = 0;
   };
 
   Evolver.prototype.reset = function () {
@@ -282,8 +333,10 @@
     this.mastered = [false, false, false];
     this.history = [];
     this.bird = new Bird(50);
+    this.pinT = 0;
     if (this.fev) this.fev.reset();
     if (this.fvis) this.fvis.reset();
+    this.respawnVisible();
   };
 
   // Paso de la escena visible: viento ambiente + fluido + ave del campeón.
@@ -292,7 +345,17 @@
     var w = windFn(tWorld);
     f.wind[0] = w[0]; f.wind[1] = w[1];
     f.step(DT);
-    return stepBird(this.bird, this.champ, tgt[0], tgt[1], f, true);
+    var err = stepBird(this.bird, this.champ, tgt[0], tgt[1], f, true);
+    // anti-atrapamiento: pegada a un borde (o al techo) y casi sin velocidad
+    // durante 1.5 s → respawn en la etapa actual.
+    var b = this.bird;
+    if ((b.x < 4 || b.x > 96 || b.y > WH - 3) && Math.hypot(b.vx, b.vy) < 8) {
+      this.pinT += DT;
+    } else {
+      this.pinT = 0;
+    }
+    if (this.pinT > 1.5) this.respawnVisible();
+    return err;
   };
 
   H.Bird = Bird;
