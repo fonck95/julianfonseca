@@ -15,14 +15,16 @@
   // Móvil o máquina corta de núcleos: rejilla más basta y menos CPU por frame.
   var light = mq('(max-width: 860px)') || mq('(pointer: coarse)') || cores <= 4;
 
-  // Escala física: 1 unidad de mundo = 1 cm. Con esa escala un ala de ~3.5 cm
-  // de envergadura batiendo a ~0.4 m/s cae en Re ≈ 10^3, el régimen de un ave
-  // pequeña / insecto grande, que es donde valen los coeficientes cuasi-
-  // estacionarios que usa 30-creature.js.
+  // Escala física: 1 unidad de mundo = 1 cm, g = 981 u/s² (9.81 m/s² real).
   H.WORLD_W = 100; // x ∈ [0, 100]
   H.WORLD_H = 40;  // y ∈ [0, 40], y = 0 es el suelo
   H.DT = 1 / 60;   // paso de la física visible
   H.CM = 0.01;     // metros por unidad de mundo
+
+  // Techo de velocidad del solver: las ráfagas del viento ambiente llegan a
+  // ~340 u/s (3.4 m/s) y las del gesto del usuario a ±4000 u/s² de fuerza —
+  // con el tope viejo (120) el viento se recortaba y no se notaba.
+  H.FLUID_MAX_SPEED = 400;
 
   // Una rejilla de nx celdas a lo ancho; ny sale de la proporción del mundo.
   H.gridFor = function (nx) {
