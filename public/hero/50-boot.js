@@ -226,7 +226,7 @@
     function target() {
       if (manual && performance.now() < manualUntil) return manual;
       manual = null; lastP = null;
-      return [50 + 24 * Math.sin(tWorld * 0.23), 8 + 7 * Math.sin(tWorld * 0.37 + 1)];
+      return H.STAGES[ev.stage].ghost(tWorld);
     }
 
     var lastHud = 0;
