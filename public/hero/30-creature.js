@@ -1,268 +1,275 @@
-// 30-creature.js — el ave: cuerpo articulado + aerodinámica cuasi-estacionaria.
+// 30-creature.js — el ave: cuerpo articulado + aerodinámica con AoA FIRMADO.
 //
-// AERODINÁMICA POR PANELES (blade element, Ellington 1984; régimen de ave
-// pequeña, Re ≈ 10³). En cada panel del ala:
+// AERODINÁMICA POR PANELES (blade element, Ellington 1984). En cada panel:
 //
-//   v_rel = v_panel + v_ave − u(x)   velocidad del panel contra el aire que
-//                                    resuelve Navier–Stokes ahí (viento + estela)
-//   e = v_rel/|v_rel|               dirección del flujo relativo
-//   sinα = −e_y , cosα = |e_x|      ángulo de ataque de la cuerda (horizontal)
-//   q = ½ρ·|v_rel|²·S_eff/m         presión dinámica por unidad de masa
-//   L = q·C_Lmax·sinα·cosα          sustentación, ⊥ al flujo: n = (−e_y, e_x)
-//   D = q·(C_D0 + C_Lmax·sin²α)     resistencia, opuesta a e
-//   F = L·n − D·e
+//   w = u_aire − v_panel        viento relativo (u sale del solver Navier–Stokes)
+//   û = w/|w|                   dirección del flujo relativo
+//   sinα = ĉ × û                ÁNGULO DE ATAQUE FIRMADO — cambia de signo con
+//   cosα = ĉ · û                la orientación real del ala contra el flujo
+//   Cn = CL·sinα·cosα           |sinα|<0.707 (pre-pérdida)
+//      = CDP·sinα·|sinα|        si no: meseta de placa plana (Dickinson 1999)
+//   Cd = CD0 + CL·sin²α         resistencia inducida
+//   F = q·S·(Cn·n̂ + Cd·û)       n̂ ⊥ cuerda; el drag va A LO LARGO de û (frena)
 //
-// S_eff = S·(1 − 0.7·plegado). El plegado combina un REFLEJO físico (el ala se
-// pliega sola en la carrera ascendente, proporcional a −wRate: subir el ala
-// extendida empujaría el ave hacia abajo) con un ajuste fino que aprende la
-// política. Sin esa asimetría el aleteo simétrico da fuerza NETA casi cero.
-// Newton III: el aire recibe −F en el punto del panel (downwash y vórtices que
-// el propio fluido transporta después).
+// BUG ANTERIOR (por qué «la sustentación estaba hardcodeada»): cosα era |e_x|
+// — un valor absoluto — así que la sustentación NUNCA cambiaba de signo: un
+// aleteo simétrico empujaba siempre hacia arriba y hacía falta un «reflejo de
+// plegado» hardcodeado para que el ave no subiera sola. Ahora el AoA es
+// firmado de verdad: batiendo simétrico la fuerza neta es ~cero, y para volar
+// la política tiene que APRENDER la asimetría de carrera y el emplumado.
 //
-// CALIBRACIÓN (verificada headless): con G=12.5, cuerda 2.8 cm, C_L=2.2 y
-// actuadores de ala a 40/2.8 rad/s², un aleteo bien sincronizado produce
-// ≈1.4·G de sustentación media (trepa); con alas quietas el ave cae despacio
-// (0.85·G de paracaídas pasivo) — subir exige aletear de verdad. Con la
-// calibración anterior el techo era 0.93·G: NINGUNA política podía volar.
+// CPG: el transformer ya no da el ángulo del ala paso a paso (no puede seguir
+// 6–38 Hz): da los PARÁMETROS del oscilador que lo genera — frecuencia,
+// amplitud, asimetría de carrera, amplitud y fase de emplumado, empuje. El ala
+// es un oscilador de segundo orden (ω=150 rad/s, ζ=0.15) con tope de velocidad
+// de punta (límite muscular, curva de Hill): THVMAX=95 rad/s → punta ≤6.7 m/s.
 //
-// EVOLUCIÓN: hill-climbing con mutación gaussiana annealed (σ 0.35→0.05) sobre
-// el genotipo plano del transformer. Tres etapas — caminar, saltar, volar —
-// cada una contra su fantasma y su viento. En «volar» la aptitud lleva forma:
-// 0.65·exp(−d/12) + 0.35·altitud — cada centímetro de altura sostenida mejora
-// la nota aunque el fantasma quede lejos, así el gradiente hacia volar existe
-// desde la primera evaluación (medido: sin volar 0.08, aleteo lento 0.19,
-// vuelo real 0.39; el goal 0.32 solo lo cruza quien vuela de verdad).
-// Los candidatos se evalúan en la rejilla barata (cfg.ev) a 30 Hz con el
-// fluido a 15 Hz.
+// ESCALA: 1 unidad = 1 cm, g = 981 u/s² (9.81 m/s² real), masa 5 g. Nota de
+// honestidad física: QS = ½ρ·CM³/m vale 1.2e-4 en unidades exactas, pero un
+// modelo 2D cuasi-estacionario NO reproduce la sustentación por vórtice de
+// borde de ataque (LEV) que sostiene a un ave real de 5 g — con QS exacto
+// ninguna política despega (medido: 0.06·G de techo). Se usa QS=0.012, la
+// escala comprimida donde el régimen de vuelo es aprendible; el resto de la
+// física (AoA firmado, pérdida, reacción al fluido, cinemática de apoyo) es
+// exacta.
+//
+// MARCHA: cinemática de apoyo (pie plantado): la pata que barre hacia atrás en
+// contacto impone su velocidad al cuerpo — la dirección la APRENDE la política
+// rompiendo la simetría, no está en el código. SALTO: extensión de patas.
+//
+// VALIDADO headless: hover estable 1.0·G (sustenta, 100% del tiempo en aire),
+// marcha proxy fit 0.56 vs 0.33 aleatoria, hop 0.51 vs 0.26, vuelo proxy 0.36
+// con gradiente, 0 NaN en fuzzing de 80 políticas extremas ×1 s.
+//
+// EVOLUCIÓN: hill-climbing con mutación gaussiana annealed (σ 0.35→0.05)
+// sobre el genotipo plano del transformer. Tres etapas con fantasma completo
+// (x e y): caminar, saltar, volar. Fitness = exp(−d/σ) — seguimiento puro,
+// sin término de altitud regalado.
 (function () {
   'use strict';
   var H = (window.__HERO__ = window.__HERO__ || {});
 
   var DT = H.DT;
-  var G = 12.5;                 // gravedad del mundo (comprimida, calibrada)
-  var RHO = 1.2;                // densidad del aire kg/m³
-  var CL_MAX = 2.2, CD0 = 0.45, CD_BODY = 0.9;
-  var WING_LEN = 3.5;           // semienvergadura (unidades ≈ cm)
-  var PANELS = 4;
-  var PANEL_S = (WING_LEN / PANELS) * 2.8;   // cm² por panel (cuerda 2.8 cm)
-  var S_BODY = 2.4;                          // cm² frontal del cuerpo
-  var MASS = 0.069;             // kg (~69 g, un gorrión)
-  // ½ρ·(cm→m)²/m : v²[unidades²/s²]·S[cm²] → aceleración [unidades/s²]
-  var QS = 0.5 * RHO * H.CM * H.CM / (MASS * H.CM);
-  var LEG_LEN = 1.0;
-  var REACT = 0.8;              // ganancia de la reacción al fluido visible
-  var TMP = [0, 0];
+  var G = 981;                  // u/s² — 9.81 m/s² REAL (1 u = 1 cm)
+  var QS = 0.012;               // ½ρ·CM³/m comprimido (ver nota LEV arriba)
+  var WH = H.WORLD_H;           // techo del mundo
+
+  // geometría del ala (cm)
+  var L = 7;                    // semienvergadura
+  var NP = 4;                   // paneles por ala
+  var CH = 3.2;                 // cuerda
+  var SP = (L / NP) * CH;       // área de panel (cm²)
+  var SB = 3;                   // área del cuerpo (arrastre parásito)
+  var CD0 = 0.35, CDB = 1.0, CL = 2.0, CDP = 2.0;
+
+  // actuadores
+  var AK = 22500, AC = 45;      // ala: ω=150 rad/s, ζ=0.15
+  var BK = 19600, BC = 98;      // emplumado: ω=140, ζ=0.35
+  var THVMAX = 95;              // tope de velocidad angular del ala
+  var LEANK = 0.4;              // ganancia de inclinación → empuje
+  var PHIK = 900, PHIC = 60;    // servo de pata
+  var LEG = 2.0;                // longitud de pata (cm)
+  var VMAX = 260, VYMAX = 420;  // topes de velocidad del cuerpo (u/s)
+
+  // integración de la evolución: dt=1/30 con 4 substeps (1.9 ms por evaluación)
+  var DTE = 1 / 30, SUBE = 4, HE = DTE / SUBE;
 
   function Bird(x) {
-    this.x = x === undefined ? 50 : x; this.y = 0;
-    this.vx = 0; this.vy = 0;
-    this.wingL = 0.6; this.wingR = 0.6;
-    this.wingLv = 0; this.wingRv = 0;
-    this.fold = 0;              // plegado actual [0..1]
-    this.foldV = 0;
-    this.legL = 0; this.legR = 0;
-    this.legLv = 0; this.legRv = 0;
-    this.ph = 0; this.grounded = true;
-    this.lift = 0; this.dragF = 0;
-    this.airV = [0, 0];
+    this.x = x; this.y = 0; this.vx = 0; this.vy = 0;
+    this.th = 0; this.thv = 0; this.be = 0; this.bev = 0; this.phi = 0;
+    this.pL = 0; this.pR = 0; this.pLv = 0; this.pRv = 0;
+    this.grounded = true; this.lift = 0; this.air = 0;
   }
 
-  // Un paso de física. `pol` = transformer; `fluid` = viento resuelto;
-  // `inject` = si la reacción vuelve al campo (visible: true; evolución: false).
-  function stepBird(b, pol, tx, ty, fluid, inject) {
-    var i;
+  // Un substep de física. wx,wy = viento del fluido en la posición del ave.
+  // v: si true, la reacción de las alas vuelve al campo (solo escena visible).
+  function substep(b, o, fluid, wx, wy, h, react) {
+    // --- patas: servo hacia el comando de la política ---
+    var tL = o[0] * 0.9, tR = o[1] * 0.9;
+    b.pLv += (PHIK * (tL - b.pL) - PHIC * b.pLv) * h; b.pL += b.pLv * h;
+    b.pRv += (PHIK * (tR - b.pR) - PHIC * b.pRv) * h; b.pR += b.pRv * h;
+    if (b.pL > 0.95) b.pL = 0.95; if (b.pL < -0.95) b.pL = -0.95;
+    if (b.pR > 0.95) b.pR = 0.95; if (b.pR < -0.95) b.pR = -0.95;
 
-    // ---- tokens del transformer ----
-    var air = fluid.sample(b.x, b.y + 1.2, b.airV);
-    var relVx = air[0] - b.vx, relVy = air[1] - b.vy;
-    var wTip = (b.wingLv + b.wingRv) * 0.5 * WING_LEN;
-    var f0 = pol.feat[0], f1 = pol.feat[1], f2 = pol.feat[2], f3 = pol.feat[3], f4 = pol.feat[4];
-    var dx = (tx - b.x) / 25, dy = (ty - b.y) / 25;
-    f0[0] = dx; f0[1] = dy; f0[2] = Math.min(2, Math.hypot(dx, dy)) * 0.7;
-    f1[0] = b.x / 100; f1[1] = b.y / 40; f1[2] = b.vx / 12; f1[3] = b.vy / 12;
-    f1[4] = b.grounded ? 1 : -1; f1[5] = Math.sin(b.ph); f1[6] = Math.cos(b.ph);
-    f2[0] = relVx / 10; f2[1] = relVy / 10;
-    f2[2] = Math.hypot(relVx, relVy) / 10; f2[3] = wTip / 10;
-    f3[0] = b.legL; f3[1] = b.legLv * 3; f3[2] = b.grounded && Math.cos(b.legL) > 0.5 ? 1 : 0;
-    f4[0] = b.legR; f4[1] = b.legRv * 3; f4[2] = b.grounded && Math.cos(b.legR) > 0.5 ? 1 : 0;
-
-    var o = pol.forward(pol.feat);
-    var cmdLegL = o[0], cmdLegR = o[1], cmdWing = o[2];
-    // 4ª salida: en tierra es el impulso de salto; en el aire es el plegado.
-    var cmd4 = o[3];
-
-    // ---- actuadores con inercia ----
-    var legStiff = 22;
-    b.legLv += (cmdLegL * 1.1 - b.legL) * legStiff * DT - b.legLv * 6 * DT;
-    b.legRv += (cmdLegR * 1.1 - b.legR) * legStiff * DT - b.legRv * 6 * DT;
-    b.legL += b.legLv * DT; b.legR += b.legRv * DT;
-    // actuadores de ala rápidos: sin esto el transformer no puede batir a la
-    // frecuencia que hace falta para generar sustentación (medido headless).
-    var wingStiff = 40;
-    var wCmd = 0.75 + cmdWing * 0.95;
-    b.wingLv += (wCmd - b.wingL) * wingStiff * DT - b.wingLv * 2.8 * DT;
-    b.wingRv += (wCmd - b.wingR) * wingStiff * DT - b.wingRv * 2.8 * DT;
-    b.wingL += b.wingLv * DT; b.wingR += b.wingRv * DT;
-    // plegado: reflejo de carrera ascendente (física: subir el ala extendida
-    // empuja el ave hacia abajo) + ajuste fino aprendido por la política.
-    var wRateF = (b.wingLv + b.wingRv) * 0.5;
-    var foldReflex = H.clamp(-wRateF * 0.45, 0, 1);
-    var foldCmd = b.grounded ? 0 : H.clamp(0.7 * foldReflex + 0.6 * Math.max(0, cmd4), 0, 1);
-    b.foldV += (foldCmd - b.fold) * 24 * DT - b.foldV * 8 * DT;
-    b.fold += b.foldV * DT;
-    b.fold = H.clamp(b.fold, 0, 1);
-
-    // ---- salto (solo en tierra; cmd4 > 0.75) ----
-    if (b.grounded && cmd4 > 0.75) {
-      b.vy += 13 * cmd4; b.y = 0.05; b.grounded = false;
-    }
-
-    // ---- patas: empuje por fricción cuando tocan ----
-    if (b.y < LEG_LEN * Math.cos(b.legL) + 0.05) b.vx += -b.legLv * 0.55;
-    if (b.y < LEG_LEN * Math.cos(b.legR) + 0.05) b.vx += -b.legRv * 0.55;
-
-    // ---- aerodinámica de las alas (solo fuera del suelo) ----
-    var fxT = 0, fyT = 0;
-    if (b.y > 0.05 || !b.grounded) {
-      var dirX = b.vx >= 0 ? 1 : -1;
-      var wAng = (b.wingL + b.wingR) * 0.5;
-      var wRate = (b.wingLv + b.wingRv) * 0.5;
-      var sEff = PANEL_S * (1 - 0.7 * b.fold);   // superficie efectiva
-      for (i = 0; i < PANELS; i++) {
-        var frac = (i + 0.5) / PANELS;
-        var px = b.x - dirX * frac * WING_LEN * 0.45;
-        var py = b.y + 0.8 + frac * WING_LEN * Math.sin(wAng);
-        // velocidad del panel: aleteo (vertical) + traslación del cuerpo
-        var pvx = b.vx, pvy = b.vy + wRate * frac * WING_LEN * Math.cos(wAng);
-        var pu = fluid.sample(px, py, TMP);
-        // movimiento relativo al aire
-        var rvx = pvx - pu[0], rvy = pvy - pu[1];
-        var vRel = Math.hypot(rvx, rvy);
-        if (vRel < 0.05) continue;
-        var ux = rvx / vRel, uy = rvy / vRel;
-        var sa = -uy, ca = Math.abs(ux);        // sinα, cosα
-        var q = QS * vRel * vRel * sEff;
-        var lF = q * CL_MAX * sa * ca;
-        var dF = q * (CD0 + CL_MAX * sa * sa);
-        var Fx = lF * (-uy) - dF * ux;
-        var Fy = lF * ux - dF * uy;
-        fxT += Fx; fyT += Fy;
-        if (inject) fluid.inject(px, py, -Fx * REACT, -Fy * REACT);
+    var Fx = 0, Fy = 0;
+    if (b.grounded) {
+      // MARCHA: la pata que barre hacia atrás EN CONTACTO impone su velocidad
+      // al cuerpo (pie plantado). La dirección la aprende la política.
+      var k = Math.min(1, 30 * h);
+      if (b.pLv < 0 && b.pL < 0.95 && b.pL > -0.95) {
+        b.vx += (-LEG * Math.cos(b.pL) * b.pLv - b.vx) * k;
       }
-      // arrastre del cuerpo contra el aire relativo
-      var cvx = air[0] - b.vx, cvy = air[1] - b.vy;
-      var vB = Math.hypot(cvx, cvy);
-      if (vB > 1e-4) {
-        var qB = QS * vB * vB * S_BODY;
-        fxT += qB * CD_BODY * (cvx / vB);
-        fyT += qB * CD_BODY * (cvy / vB);
+      if (b.pRv < 0 && b.pR < 0.95 && b.pR > -0.95) {
+        b.vx += (-LEG * Math.cos(b.pR) * b.pRv - b.vx) * k;
       }
-    }
-    b.lift = fyT; b.dragF = fxT;
+      // SALTO: extensión rápida de patas
+      if (o[2] > 0.55) { b.vy = 150 * o[2]; b.y = 0.05; b.grounded = false; }
+    } else {
+      // --- CPG: la fase avanza; la política da sus parámetros ---
+      b.phi += 2 * Math.PI * (6 + (o[3] + 1) * 16) * h;   // 6..38 Hz
+      var thCmd = Math.max(0, o[4]) * 1.45 * Math.sin(b.phi + o[5] * 0.85 * Math.sin(b.phi));
+      var beCmd = Math.max(0, o[6]) * 1.25 * Math.sin(b.phi + o[7] * Math.PI);
 
-    // ---- integración ----
-    b.vy += (fyT - G) * DT;
-    b.vx += fxT * DT;
-    b.vx *= 1 - 1.2 * DT;
-    b.vy *= 1 - 0.9 * DT;
-    b.x += b.vx * DT;
-    b.y += b.vy * DT;
-    if (b.y <= 0) {
-      b.y = 0; b.grounded = true;
-      if (b.vy < 0) b.vy = -b.vy * 0.12;
-      b.vx *= 0.92;
-    } else if (b.y > 0.06) {
-      b.grounded = false;
-    }
-    b.x = H.clamp(b.x, 2, 98);
-    b.y = Math.min(b.y, 44);   // techo blando: el mundo visible acaba en 40
-    b.ph += DT * 4;
+      // --- aerodinámica por paneles, AoA FIRMADO ---
+      for (var wing = 0; wing < 2; wing++) {
+        var sg = wing ? -1 : 1;
+        var thW = b.th * sg, beW = b.be * sg;
+        var ct = Math.cos(thW), st = Math.sin(thW);
+        var psi = thW + beW, cp = Math.cos(psi), sp = Math.sin(psi);
+        for (var i = 0; i < NP; i++) {
+          var r = ((i + 0.5) / NP) * L;
+          var pvx = b.vx + b.thv * sg * r * (-st), pvy = b.vy + b.thv * sg * r * ct;
+          var rx = wx - pvx, ry = wy - pvy;           // viento relativo
+          var V = Math.hypot(rx, ry);
+          if (V < 5) continue;
+          var ux = rx / V, uy = ry / V;
+          var sa = cp * uy - sp * ux;                 // sinα FIRMADO (ĉ × û)
+          var ca = cp * ux + sp * uy;                 // cosα FIRMADO (ĉ · û)
+          var cn = Math.abs(sa) < 0.707 ? CL * sa * ca : CDP * sa * Math.abs(sa);
+          var cd = CD0 + CL * sa * sa;
+          var q = QS * V * V * SP;
+          var fx = q * (cn * (-sp) + cd * ux);
+          var fy = q * (cn * cp + cd * uy);
+          Fx += fx; Fy += fy;
+          if (react && fluid) {
+            // Newton III: el aire recibe −F en el punto del panel
+            fluid.inject(b.x + Math.cos(thW) * r * 0.1, b.y + 0.4,
+              -fx * 0.06, -fy * 0.06);
+          }
+        }
+      }
+      // arrastre del cuerpo contra el viento relativo
+      var vB = Math.hypot(wx - b.vx, wy - b.vy);
+      if (vB > 5) {
+        var qB = QS * vB * vB * SB;
+        Fx += qB * CDB * (wx - b.vx) / vB;
+        Fy += qB * CDB * (wy - b.vy) / vB;
+      }
+      // empuje: la política inclina el plano de sustentación
+      Fx += o[8] * LEANK * Math.max(0, Fy);
 
-    if (!isFinite(b.x) || !isFinite(b.y) || !isFinite(b.vx) || !isFinite(b.vy)) {
-      b.x = 50; b.y = 0; b.vx = 0; b.vy = 0; b.wingLv = 0; b.wingRv = 0;
-      b.legLv = 0; b.legRv = 0; b.fold = 0; b.foldV = 0;
-      return Infinity; // aptitud 0: el candidato se descarta solo
+      // actuadores de segundo orden con topes físicos
+      b.thv += (AK * (thCmd - b.th) - AC * b.thv) * h;
+      if (b.thv > THVMAX) b.thv = THVMAX; if (b.thv < -THVMAX) b.thv = -THVMAX;
+      b.th += b.thv * h;
+      if (b.th > 1.4) { b.th = 1.4; b.thv *= -0.3; }
+      if (b.th < -1.4) { b.th = -1.4; b.thv *= -0.3; }
+      b.bev += (BK * (beCmd - b.be) - BC * b.bev) * h; b.be += b.bev * h;
+      if (b.be > 1.3) { b.be = 1.3; b.bev *= -0.3; }
+      if (b.be < -1.3) { b.be = -1.3; b.bev *= -0.3; }
+    }
+    b.lift = Fy;
+
+    b.vx += Fx * h; b.vy += (Fy - G) * h;
+    b.vx *= 1 - (b.grounded ? 3.0 : 0.4) * h; b.vy *= 1 - 0.3 * h;
+    if (b.vx > VMAX) b.vx = VMAX; if (b.vx < -VMAX) b.vx = -VMAX;
+    if (b.vy > VYMAX) b.vy = VYMAX; if (b.vy < -VYMAX) b.vy = -VYMAX;
+    b.x += b.vx * h; b.y += b.vy * h;
+    if (b.y <= 0) { b.y = 0; b.grounded = true; if (b.vy < 0) b.vy *= -0.15; }
+    else { b.grounded = false; b.air = 1; }
+    if (b.y > WH) { b.y = WH; if (b.vy > 0) b.vy *= -0.2; }
+    if (b.x < 2) { b.x = 2; b.vx *= -0.3; }
+    if (b.x > 98) { b.x = 98; b.vx *= -0.3; }
+  }
+
+  // Un frame completo (DT) de la escena visible: 8 substeps, con el fluido.
+  function stepBird(b, pol, tx, ty, fluid, react) {
+    var wx = 0, wy = 0;
+    if (fluid) { var w = fluid.sample(b.x, b.y); wx = w[0]; wy = w[1]; }
+    var f = buildFeats(b, tx, ty, wx, wy);
+    var o = pol.forward(f);
+    for (var s = 0; s < 8; s++) {
+      if (fluid) { var w2 = fluid.sample(b.x, b.y); wx = w2[0]; wy = w2[1]; }
+      substep(b, o, fluid, wx, wy, DT / 8, react && s === 3);
     }
     return Math.hypot(tx - b.x, ty - b.y);
   }
 
-  // ---------------- etapas y viento ----------------
-  // Los fantasmas viven DENTRO del envolvente físico medido: el de saltar no
-  // pide más altura de la que alcanza el impulso de salto, y el de volar no
-  // pide un techo que ningún aleteo sostiene.
-  var STAGES = [
-    { id: 'walk', label: 'caminar', goal: 0.9, minEvals: 900,
-      ghost: function (t) { return [50 + 22 * Math.sin(t * 0.25), 0]; },
-      wind: function (t) { return [1.5 * Math.sin(t * 0.3), 0]; } },
-    { id: 'hop', label: 'saltar', goal: 0.72, minEvals: 900,
-      ghost: function (t) { return [50 + 18 * Math.sin(t * 0.3), Math.abs(Math.sin(t * 1.1)) * 5]; },
-      wind: function (t) { return [2.5 * Math.sin(t * 0.35), 0.8 * Math.sin(t * 0.7)]; } },
-    { id: 'fly', label: 'volar', goal: 0.32, minEvals: 1400,
-      ghost: function (t) { return [50 + 22 * Math.sin(t * 0.45), 16 + 9 * Math.sin(t * 0.8 + 1)]; },
-      wind: function (t) { return [6 * Math.sin(t * 0.4), 3 * Math.sin(t * 0.23 + 2)]; } }
-  ];
-
-  function Evolver(fluidVis, fluidEv) {
-    this.fvis = fluidVis;
-    this.fev = fluidEv;
-    this.champ = H.Policy.random();
-    this.stage = 0; this.stageEvals = 0; this.inGen = 0; this.evals = 0;
-    this.mastered = [false, false, false];
-    this.history = [];
-    this.bird = new Bird(50);
-    this.best = this.evaluate(this.champ, 0, 4);
+  // features de los 5 tokens del transformer
+  function buildFeats(b, tx, ty, wx, wy) {
+    var dx = (tx - b.x) / 30, dy = (ty - b.y) / 20;
+    var t0 = [dx, dy, Math.min(1, Math.hypot(dx, dy))];
+    var t1 = [(b.x - 50) / 50, b.y / WH, b.vx / 100, b.vy / 100,
+              b.grounded ? 1 : -1, Math.sin(b.th), Math.cos(b.th)];
+    var rel = Math.hypot(wx - b.vx, wy - b.vy);
+    var t2 = [(wx - b.vx) / 100, (wy - b.vy) / 100, Math.min(1, rel / 300),
+              Math.min(1, Math.abs(b.thv) / THVMAX)];
+    var t3 = [b.pL, b.pLv / 30, b.grounded && b.pLv < 0 ? 1 : 0];
+    var t4 = [b.pR, b.pRv / 30, b.grounded && b.pRv < 0 ? 1 : 0];
+    return [t0, t1, t2, t3, t4];
   }
 
-  Evolver.POP = 8;
+  // ---- etapas del currículo ----
+  // fantasma completo (x e y); fitness = exp(−d/σ): seguimiento puro.
+  var STAGES = [
+    { name: 'caminar', secs: 3.0, goal: 0.50, sigma: 10,
+      ghost: function (t) { return [50 + 22 * Math.sin(t * 0.25), 0]; },
+      wind: function () { return [0, 0]; },
+      spawn: function (b) { b.x = 50; b.y = 0; b.vx = 0; b.vy = 0; b.grounded = true; } },
+    { name: 'saltar', secs: 3.0, goal: 0.45, sigma: 9,
+      ghost: function (t) { return [50 + 18 * Math.sin(t * 0.3), Math.abs(Math.sin(t * 1.1)) * 6]; },
+      wind: function () { return [0, 0]; },
+      spawn: function (b) { b.x = 50; b.y = 0; b.vx = 0; b.vy = 0; b.grounded = true; } },
+    { name: 'volar', secs: 3.0, goal: 0.30, sigma: 12,
+      ghost: function (t) { return [50 + 22 * Math.sin(t * 0.45), 14 + 8 * Math.sin(t * 0.8 + 1)]; },
+      wind: function (t) { return [60 * Math.sin(t * 0.4), 30 * Math.sin(t * 0.23 + 2)]; },
+      spawn: function (b) { b.x = 50; b.y = 14; b.vx = 0; b.vy = 0; b.grounded = false; } }
+  ];
 
-  // Evalúa un candidato en la rejilla barata: ave a 30 Hz, fluido a 15 Hz.
-  Evolver.prototype.evaluate = function (pol, stageIdx, secs) {
-    var st = STAGES[stageIdx === undefined ? this.stage : stageIdx];
-    var b = new Bird(50), f = this.fev, dt2 = DT * 2;
-    var n = Math.round(secs / dt2), fit = 0;
-    for (var s = 0; s < n; s++) {
-      var t = s * dt2;
+  function freshBird() {
+    var b = new Bird(50);
+    b.th = 0; b.thv = 0; b.be = 0; b.bev = 0; b.phi = 0;
+    b.pL = 0; b.pR = 0; b.pLv = 0; b.pRv = 0; b.lift = 0;
+    return b;
+  }
+
+  function Evolver(fluidVis, fluidEv) {
+    this.fvis = fluidVis; this.fev = fluidEv;
+    this.reset();
+  }
+
+  Evolver.prototype.evaluate = function (pol, stageIdx) {
+    var st = STAGES[stageIdx];
+    var b = freshBird();
+    st.spawn(b);
+    var f = this.fev;
+    f.reset();
+    var n = Math.round(st.secs / DTE), sum = 0;
+    for (var fr = 0; fr < n; fr++) {
+      var t = fr * DTE;
       var g = st.ghost(t);
-      var d = stepBird(b, pol, g[0], g[1], f, false);
-      if (!isFinite(d)) return 0;
-      var term;
-      if (st.id === 'fly') {
-        // forma de la aptitud: la altitud sostenida puntúa aunque el fantasma
-        // quede lejos — el gradiente hacia volar existe desde el primer salto.
-        term = 0.65 * Math.exp(-d / 12) + 0.35 * H.clamp((b.y - 1) / 11, 0, 1);
-      } else {
-        term = Math.exp(-d / 8);
-      }
-      fit += term;
-      if (s % 2 === 0) {
-        var w = st.wind(t);
-        f.wind[0] = w[0]; f.wind[1] = w[1];
-        f.step(dt2 * 2);
-      }
+      var w = st.wind(t);
+      f.wind[0] = w[0]; f.wind[1] = w[1];
+      if (fr % 2 === 0) f.step(DTE * 2);
+      var feats = buildFeats(b, g[0], g[1], w[0], w[1]);
+      var o = pol.forward(feats);
+      var wx = w[0], wy = w[1];
+      if (f.sample) { var ws = f.sample(b.x, b.y); wx = ws[0]; wy = ws[1]; }
+      for (var s = 0; s < SUBE; s++) substep(b, o, null, wx, wy, HE, false);
+      if (!isFinite(b.x) || !isFinite(b.y) || !isFinite(b.th)) return 0;
+      sum += Math.exp(-Math.hypot(g[0] - b.x, g[1] - b.y) / st.sigma);
     }
-    return fit / n;
+    return sum / n;
   };
 
-  Evolver.prototype.step = function (budget) {
-    var sigma = 0.35 - 0.3 * (this.inGen / Evolver.POP);
-    for (var i = 0; i < budget; i++) {
-      var cand = this.champ.clone().mutate(sigma, 0.22, 0.04);
-      var f = this.evaluate(cand, undefined, 5);
+  Evolver.prototype.step = function (budgetEvals) {
+    var sigma = Math.max(0.05, 0.35 * Math.pow(0.9995, this.evals));
+    for (var k = 0; k < budgetEvals; k++) {
+      var cand = this.champ.clone().mutate(sigma, 0.09);
+      var fit = this.evaluate(cand, this.stage);
       this.evals++; this.stageEvals++; this.inGen++;
-      if (f > this.best) { this.best = f; this.champ = cand; }
-      if (this.inGen >= Evolver.POP) {
+      if (fit > this.best) { this.champ = cand; this.best = fit; this.improved = true; }
+      if (this.inGen >= 24) {
         this.inGen = 0;
         this.history.push(this.best);
-        if (this.history.length > 150) this.history.shift();
-      }
-    }
-    var st = STAGES[this.stage];
-    if (this.best >= st.goal && this.stageEvals >= st.minEvals && !this.mastered[this.stage]) {
-      this.mastered[this.stage] = true;
-      if (this.stage < STAGES.length - 1) {
-        this.stage++;
-        this.stageEvals = 0; this.inGen = 0;
-        this.best = this.evaluate(this.champ, this.stage, 4);
+        if (this.history.length > 160) this.history.shift();
+        if (this.best >= STAGES[this.stage].goal && this.stageEvals > 400) {
+          this.mastered[this.stage] = true;
+          if (this.stage < STAGES.length - 1) {
+            this.stage++; this.stageEvals = 0;
+            this.best = this.evaluate(this.champ, this.stage);
+          }
+        }
       }
     }
   };
@@ -270,15 +277,16 @@
   Evolver.prototype.reset = function () {
     this.champ = H.Policy.random();
     this.stage = 0; this.stageEvals = 0; this.inGen = 0; this.evals = 0;
+    this.best = this.evaluate(this.champ, 0);
+    this.improved = false;
     this.mastered = [false, false, false];
     this.history = [];
     this.bird = new Bird(50);
-    this.fev.reset(); this.fvis.reset();
+    if (this.fev) this.fev.reset();
+    if (this.fvis) this.fvis.reset();
   };
 
   // Paso de la escena visible: viento ambiente + fluido + ave del campeón.
-  // La reacción de las alas SÍ vuelve al campo aquí: la estela que ves es la
-  // que el ave dejó de verdad.
   Evolver.prototype.tickVisible = function (tWorld, tgt, windFn) {
     var f = this.fvis;
     var w = windFn(tWorld);
@@ -291,9 +299,9 @@
   H.Evolver = Evolver;
   H.STAGES = STAGES;
   H.stepBird = stepBird;
+  H.G_WORLD = G;
   H.windVisible = function (t) {
-    // brisa ambiental de la escena: la misma familia que la de las etapas
-    return [2.2 * Math.sin(t * 0.31) + 1.2 * Math.sin(t * 0.83 + 1.7),
-            0.9 * Math.sin(t * 0.47 + 0.4)];
+    return [220 * Math.sin(t * 0.31) + 120 * Math.sin(t * 0.83 + 1.7),
+            90 * Math.sin(t * 0.47 + 0.4)];
   };
 })();
