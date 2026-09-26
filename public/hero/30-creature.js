@@ -343,6 +343,8 @@
     this.pinT = 0;
   };
 
+  Evolver.prototype.reward = function () { this.rewards++; this.focusUntil = this.evals + 300; };
+
   Evolver.prototype.reset = function () {
     this.champ = H.Policy.random();
     this.stage = 0; this.stageEvals = 0; this.inGen = 0; this.evals = 0;
@@ -350,6 +352,7 @@
     this.improved = false;
     this.mastered = [false, false, false];
     this.history = [];
+    this.elites = []; this.sinceImp = 0; this.focusUntil = 0; this.rewards = 0;
     this.bird = new Bird(50);
     this.pinT = 0;
     if (this.fev) this.fev.reset();
