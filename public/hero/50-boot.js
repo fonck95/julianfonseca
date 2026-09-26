@@ -132,6 +132,14 @@
       ctx.stroke();
     }
   };
+    if (this.rewardFlashT > 0) {
+      ctx.strokeStyle = 'rgba(255,199,89,' + (0.25 + 0.5 * this.rewardFlashT).toFixed(3) + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      if (ctx.ellipse) ctx.ellipse(bx, by, (5 + 3 * (1 - this.rewardFlashT)) * u, (3.4 + 2 * (1 - this.rewardFlashT)) * u, 0, 0, 6.283);
+      else ctx.arc(bx, by, 4.5 * u, 0, 6.283);
+      ctx.stroke();
+    }
 
   // ---------- arranque ----------
   H.boot = function () {
@@ -167,6 +175,8 @@
     var dotEl = document.querySelector('.lab-dot');
     var stagesEl = document.getElementById('hud-stages');
     var resetBtn = document.getElementById('hud-reset');
+    var rewardBtn = document.getElementById('hud-reward');
+    var rewardsEl = document.getElementById('hud-rewards');
     var items = stagesEl ? stagesEl.querySelectorAll('li') : [];
 
     var MSGS = [
@@ -186,6 +196,14 @@
       if (hudMsg) hudMsg.textContent = 'cerebro al azar: el ave ni se sostiene…';
     }
     if (resetBtn) resetBtn.addEventListener('click', reset);
+    if (rewardBtn) rewardBtn.addEventListener('click', function () {
+      ev.reward();
+      if (rewardsEl) rewardsEl.textContent = String(ev.rewards);
+      ev.rewardFlash = 0.6;
+      rewardBtn.classList.remove('pulse');
+      void rewardBtn.offsetWidth;
+      rewardBtn.classList.add('pulse');
+    });
 
     // ---- objetivo: cursor/dedo, con vuelta a la trayectoria automática ----
     var manual = null, manualUntil = 0, lastP = null;
@@ -282,12 +300,14 @@
       while (acc >= H.DT && guard++ < 4) {
         acc -= H.DT;
         tWorld += H.DT;
+        if (ev.rewardFlash > 0) ev.rewardFlash -= H.DT;
         err = ev.tickVisible(tWorld, target(), H.windVisible);
         trail.push([ev.bird.x, ev.bird.y + 1]);
         if (trail.length > 48) trail.shift();
       }
 
       renderer.bg(now);
+      renderer.rewardFlashT = ev.rewardFlash || 0;
       renderer.drawWind(fluidVis, dt);
       renderer.drawWorld(ev, target(), now, trail);
       updateHud(now, err);
