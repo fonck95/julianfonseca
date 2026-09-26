@@ -1,41 +1,44 @@
-// 20-policy.js — cerebro transformer: 9 salidas que pilotan un CPG.
+// 20-policy.js — cerebro transformer: 12 salidas que pilotan un CPG.
 //
 // TOKENS (5):
 //   t0 objetivo       [dx, dy, dist]
-//   t1 cuerpo         [x, y, vx, vy, enSuelo, sinφ, cosφ]
+//   t1 cuerpo         [x, y, vx, vy, enSuelo, sinφ, cosφ, sinφL]
 //   t2 viento en alas [ux, uy, |u_rel|, velocidad de punta]  ← solo el transformer
-//   t3 pata izquierda [ángulo, velocidad, contacto]             puede usarlo bien
-//   t4 pata derecha   [ángulo, velocidad, contacto]
+//   t3 pata izquierda [ángulo, velocidad, sinφL, contacto]
+//   t4 pata derecha   [ángulo, velocidad, cosφL, contacto]
 //
-// SALIDAS (9 en [−1,1]):
+// SALIDAS (12 en [−1,1]):
 //   o[0] legL       comando de pata izquierda
 //   o[1] legR       comando de pata derecha
 //   o[2] jump       impulso de salto (solo en tierra)
-//   o[3] cpgFreq    frecuencia del CPG: 6 + (o[3]+1)·16 → 6..38 Hz
-//   o[4] cpgAmp     amplitud de batido: max(0,o[4])·1.45 rad
-//   o[5] cpgAsym    asimetría de carrera: o[5]·0.85
-//   o[6] pitchAmp   amplitud de emplumado: max(0,o[6])·1.25 rad
-//   o[7] pitchPh    fase de emplumado: o[7]·π rad
-//   o[8] lean       inclinación de empuje (componente horizontal de la sustentación)
+//   o[3] cpgFreq    frecuencia del CPG de patas
+//   o[4] cpgAmp     amplitud del CPG de patas
+//   o[5] cpgAsym    asimetría del CPG de patas
+//   o[6] wingFreq   frecuencia del CPG de alas
+//   o[7] wingAmp    amplitud de batido
+//   o[8] wingAsym   asimetría de carrera
+//   o[9] pitchAmp   amplitud de emplumado
+//   o[10] pitchPh   fase de emplumado
+//   o[11] lean      inclinación de empuje
 //
 // El CPG vive en 30-creature.js: la política no da el ángulo del ala paso a
 // paso sino los PARÁMETROS del oscilador que lo genera. Así la evolución busca
-// en un espacio continuo de 9D en vez de una secuencia temporal de 60 pasos.
+// en un espacio continuo de 12D en vez de una secuencia temporal de 60 pasos.
 //
-// Bloque transformer (post-norm, Vaswani et al. 2017): d_model=12, 2 cabezas
-// de 6 dims, FFN 12→24→12. ~1900 parámetros en UN Float64Array plano (el
+// Bloque transformer (post-norm, Vaswani et al. 2017): d_model=16, 2 cabezas
+// de 8 dims, FFN 16→32→16. ~1900 parámetros en UN Float64Array plano (el
 // genotipo): la neuroevolución muta ese vector, sin backprop.
 (function () {
   'use strict';
   var H = (window.__HERO__ = window.__HERO__ || {});
 
-  var D = 12;
+  var D = 16;
   var HEADS = 2;
-  var DH = D / HEADS; // 6
-  var DF = 24;
-  var TOK = [3, 7, 4, 3, 3];
+  var DH = D / HEADS; // 8
+  var DF = 32;
+  var TOK = [3, 8, 4, 4, 4];
   var NT = TOK.length;
-  var NOUT = 9;
+  var NOUT = 12;
 
   var off = {}, size = 0;
   function seg(name, n) { off[name] = size; size += n; return n; }
@@ -109,7 +112,7 @@
       }
     }
 
-    // 2) MHA: A = softmax(QKᵀ/√d_k)V, 2 cabezas × 6 dims
+    // 2) MHA: A = softmax(QKᵀ/√d_k)V, 2 cabezas × 8 dims
     for (t = 0; t < NT; t++) {
       var xb2 = t * D;
       for (d = 0; d < D; d++) {
@@ -165,7 +168,7 @@
       layerNorm(x, a, xb4, g.subarray(off.ln2g, off.ln2g + D), g.subarray(off.ln2b, off.ln2b + D));
     }
 
-    // 4) mean-pool → cabeza de salida → 9 actuadores en [−1, 1]
+    // 4) mean-pool → cabeza de salida → 12 actuadores en [−1, 1]
     var o = this.o;
     for (d = 0; d < NOUT; d++) {
       s = g[off.bh + d];

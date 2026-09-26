@@ -37,6 +37,11 @@
 // contacto impone su velocidad al cuerpo — la dirección la APRENDE la política
 // rompiendo la simetría, no está en el código. SALTO: extensión de patas.
 //
+// CPG DE PATAS BIDIRECCIONAL: el transformer da parámetros para un CPG de
+// patas independiente (phiL) que corre SIEMPRE (tierra o aire). La fase de
+// patas determina el contacto (stance = sin(phiL+ph)<0 para izquierda,
+// sin(phiL)<0 para derecha), sustituyendo el antiguo chequeo de velocidad.
+//
 // COMPUERTAS DE MODALIDAD (por qué antes «solo sustentaba»): la aptitud era
 // exp(−d/σ) pura y hacer hover en el centro puntúa mejor que cualquier
 // intento torpe de caminar — la evolución encontraba ese óptimo local y se
@@ -50,7 +55,7 @@
 // PAREDES: antes multiplicaban la velocidad por −0.3 EN CADA SUBSTEP aunque
 // ya apuntara hacia dentro — el ave quedaba quieta y confinada en el borde.
 // Ahora solo se amortigua la componente que sale, y un detector de
-// atrapamiento la respawnea si pasa 1.5 s pegada a un borde casi sin
+// atrapamiento la respawnea si pasa 1.2 s pegada a un borde casi sin
 // velocidad.
 //
 // EVOLUCIÓN: hill-climbing con mutación gaussiana annealed (σ 0.35→0.05)
@@ -77,9 +82,9 @@
   var AK = 22500, AC = 45;      // ala: ω=150 rad/s, ζ=0.15
   var BK = 19600, BC = 98;      // emplumado: ω=140, ζ=0.35
   var THVMAX = 95;              // tope de velocidad angular del ala
-  var LEANK = 0.4;              // ganancia de inclinación → empuje
-  var PHIK = 900, PHIC = 60;    // servo de pata
-  var LEG = 2.0;                // longitud de pata (cm)
+  var LEANK = 0.9;              // ganancia de inclinación → empuje
+  var PHIK = 6000, PHIC = 180;  // servo de pata
+  var LEG = 4.5;                // longitud de pata (cm)
   var VMAX = 260, VYMAX = 420;  // topes de velocidad del cuerpo (u/s)
 
   // integración de la evolución: dt=1/30 con 4 substeps (1.9 ms por evaluación)
@@ -88,6 +93,7 @@
   function Bird(x) {
     this.x = x; this.y = 0; this.vx = 0; this.vy = 0;
     this.th = 0; this.thv = 0; this.be = 0; this.bev = 0; this.phi = 0;
+    this.phiL = 0; this.phLeg = 0;
     this.pL = 0; this.pR = 0; this.pLv = 0; this.pRv = 0;
     this.grounded = true; this.lift = 0; this.air = 0;
   }
@@ -95,8 +101,14 @@
   // Un substep de física. wx,wy = viento del fluido en la posición del ave.
   // v: si true, la reacción de las alas vuelve al campo (solo escena visible).
   function substep(b, o, fluid, wx, wy, h, react) {
-    // --- patas: servo hacia el comando de la política ---
-    var tL = o[0] * 0.9, tR = o[1] * 0.9;
+    // --- CPG de patas (siempre, tierra o aire) ---
+    b.phiL += 2 * Math.PI * (2 + (o[3] + 1) * 5) * h;
+    var amp = o[4] * 0.95;
+    var ph = o[5] * 1.2;
+    b.phLeg = ph;
+    var tL = amp * Math.sin(b.phiL + ph) + o[0] * 0.3;
+    var tR = amp * Math.sin(b.phiL) + o[1] * 0.3;
+    // servo de pata hacia el comando del CPG
     b.pLv += (PHIK * (tL - b.pL) - PHIC * b.pLv) * h; b.pL += b.pLv * h;
     b.pRv += (PHIK * (tR - b.pR) - PHIC * b.pRv) * h; b.pR += b.pRv * h;
     if (b.pL > 0.95) b.pL = 0.95; if (b.pL < -0.95) b.pL = -0.95;
@@ -107,19 +119,21 @@
       // MARCHA: la pata que barre hacia atrás EN CONTACTO impone su velocidad
       // al cuerpo (pie plantado). La dirección la aprende la política.
       var k = Math.min(1, 30 * h);
-      if (b.pLv < 0 && b.pL < 0.95 && b.pL > -0.95) {
+      var stanceL = Math.sin(b.phiL + ph) < 0;
+      var stanceR = Math.sin(b.phiL) < 0;
+      if (stanceL) {
         b.vx += (-LEG * Math.cos(b.pL) * b.pLv - b.vx) * k;
       }
-      if (b.pRv < 0 && b.pR < 0.95 && b.pR > -0.95) {
+      if (stanceR) {
         b.vx += (-LEG * Math.cos(b.pR) * b.pRv - b.vx) * k;
       }
       // SALTO: extensión rápida de patas
       if (o[2] > 0.55) { b.vy = 150 * o[2]; b.y = 0.05; b.grounded = false; }
     } else {
-      // --- CPG: la fase avanza; la política da sus parámetros ---
-      b.phi += 2 * Math.PI * (6 + (o[3] + 1) * 16) * h;   // 6..38 Hz
-      var thCmd = Math.max(0, o[4]) * 1.45 * Math.sin(b.phi + o[5] * 0.85 * Math.sin(b.phi));
-      var beCmd = Math.max(0, o[6]) * 1.25 * Math.sin(b.phi + o[7] * Math.PI);
+      // --- CPG de alas: la fase avanza; la política da sus parámetros ---
+      b.phi += 2 * Math.PI * (6 + (o[6] + 1) * 16) * h;   // 6..38 Hz
+      var thCmd = Math.max(0, o[7]) * 1.45 * Math.sin(b.phi + o[8] * 0.85 * Math.sin(b.phi));
+      var beCmd = Math.max(0, o[9]) * 1.25 * Math.sin(b.phi + o[10] * Math.PI);
 
       // --- aerodinámica por paneles, AoA FIRMADO ---
       for (var wing = 0; wing < 2; wing++) {
@@ -157,7 +171,7 @@
         Fy += qB * CDB * (wy - b.vy) / vB;
       }
       // empuje: la política inclina el plano de sustentación
-      Fx += o[8] * LEANK * Math.max(0, Fy);
+      Fx += o[11] * LEANK * Math.max(0, Fy);
 
       // actuadores de segundo orden con topes físicos
       b.thv += (AK * (thCmd - b.th) - AC * b.thv) * h;
@@ -172,7 +186,7 @@
     b.lift = Fy;
 
     b.vx += Fx * h; b.vy += (Fy - G) * h;
-    b.vx *= 1 - (b.grounded ? 3.0 : 0.4) * h; b.vy *= 1 - 0.3 * h;
+    b.vx *= 1 - (b.grounded ? 1.0 : 0.4) * h; b.vy *= 1 - 0.3 * h;
     if (b.vx > VMAX) b.vx = VMAX; if (b.vx < -VMAX) b.vx = -VMAX;
     if (b.vy > VYMAX) b.vy = VYMAX; if (b.vy < -VYMAX) b.vy = -VYMAX;
     b.x += b.vx * h; b.y += b.vy * h;
@@ -204,12 +218,13 @@
     var dx = (tx - b.x) / 30, dy = (ty - b.y) / 20;
     var t0 = [dx, dy, Math.min(1, Math.hypot(dx, dy))];
     var t1 = [(b.x - 50) / 50, b.y / WH, b.vx / 100, b.vy / 100,
-              b.grounded ? 1 : -1, Math.sin(b.th), Math.cos(b.th)];
+              b.grounded ? 1 : -1, Math.sin(b.th), Math.cos(b.th),
+              Math.sin(b.phiL), Math.cos(b.phiL)];
     var rel = Math.hypot(wx - b.vx, wy - b.vy);
     var t2 = [(wx - b.vx) / 100, (wy - b.vy) / 100, Math.min(1, rel / 300),
               Math.min(1, Math.abs(b.thv) / THVMAX)];
-    var t3 = [b.pL, b.pLv / 30, b.grounded && b.pLv < 0 ? 1 : 0];
-    var t4 = [b.pR, b.pRv / 30, b.grounded && b.pRv < 0 ? 1 : 0];
+    var t3 = [b.pL, b.pLv / 30, Math.sin(b.phiL), b.grounded ? 1 : 0];
+    var t4 = [b.pR, b.pRv / 30, Math.cos(b.phiL), b.grounded ? 1 : 0];
     return [t0, t1, t2, t3, t4];
   }
 
@@ -234,13 +249,13 @@
       spawn: function (b) { b.x = 50; b.y = 0; b.vx = 0; b.vy = 0; b.grounded = true; } },
     { name: 'volar', secs: 4.0, goal: 0.32, sigma: 12,
       ghost: function (t) { return [50 + 22 * Math.sin(t * 0.45), 14 + 8 * Math.sin(t * 0.8 + 1)]; },
-      wind: function (t) { return [60 * Math.sin(t * 0.4), 30 * Math.sin(t * 0.23 + 2)]; },
+      wind: function (t) { return [150 * Math.sin(t * 0.4), 40 * Math.sin(t * 0.23 + 2)]; },
       spawn: function (b) { b.x = 50; b.y = 14; b.vx = 0; b.vy = 0; b.grounded = false; } }
   ];
 
   function freshBird() {
     var b = new Bird(50);
-    b.th = 0; b.thv = 0; b.be = 0; b.bev = 0; b.phi = 0;
+    b.th = 0; b.thv = 0; b.be = 0; b.bev = 0; b.phi = 0; b.phiL = 0;
     b.pL = 0; b.pR = 0; b.pLv = 0; b.pRv = 0; b.lift = 0;
     return b;
   }
@@ -342,19 +357,19 @@
   // Paso de la escena visible: viento ambiente + fluido + ave del campeón.
   Evolver.prototype.tickVisible = function (tWorld, tgt, windFn) {
     var f = this.fvis;
-    var w = windFn(tWorld);
+    var w = windFn(tWorld, this.stage);
     f.wind[0] = w[0]; f.wind[1] = w[1];
     f.step(DT);
     var err = stepBird(this.bird, this.champ, tgt[0], tgt[1], f, true);
     // anti-atrapamiento: pegada a un borde (o al techo) y casi sin velocidad
-    // durante 1.5 s → respawn en la etapa actual.
+    // durante 1.2 s → respawn en la etapa actual.
     var b = this.bird;
-    if ((b.x < 4 || b.x > 96 || b.y > WH - 3) && Math.hypot(b.vx, b.vy) < 8) {
+    if (b.x < 3 || b.x > 97 || b.y > WH - 2) {
       this.pinT += DT;
     } else {
       this.pinT = 0;
     }
-    if (this.pinT > 1.5) this.respawnVisible();
+    if (this.pinT > 1.2) this.respawnVisible();
     return err;
   };
 
@@ -363,8 +378,8 @@
   H.STAGES = STAGES;
   H.stepBird = stepBird;
   H.G_WORLD = G;
-  H.windVisible = function (t) {
-    return [220 * Math.sin(t * 0.31) + 120 * Math.sin(t * 0.83 + 1.7),
-            90 * Math.sin(t * 0.47 + 0.4)];
+  H.windVisible = function (t, stage) {
+    var w = H.STAGES[stage || 0].wind(t);
+    return [w[0] + 30 * Math.sin(t * 0.9), w[1] + 15 * Math.sin(t * 0.7)];
   };
 })();
