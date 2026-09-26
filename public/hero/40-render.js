@@ -1,12 +1,15 @@
-// 40-render.js — dibujo: el campo de viento visible, el ave y el HUD.
+// 40-render.js — dibujo: el campo de viento visible, el ave y el fondo.
 //
-// Lo nuevo: TRAZADORES. Cientos de partículas que se advectan con el campo que
-// resuelve Navier–Stokes: el viento deja de ser invisible y se ven las
-// estelas y los vórtices que el aleteo deja en el aire. El color de cada
-// traza depende de su velocidad.
+// TRAZADORES: cientos de partículas que se advectan con el campo que resuelve
+// Navier–Stokes: el viento deja de ser invisible y se ven las estelas y los
+// vórtices que el aleteo deja en el aire. El color de cada traza depende de su
+// velocidad.
 //
-// Móvil: menos trazadores, sin el fondo de campo neuronal (que era lo más
-// caro de dibujar) y con el HUD compacto.
+// Con BirdLab (widget exclusivo) NADA flota sobre el canvas: la telemetría
+// vive fuera del escenario, así que el suelo usa todo el alto del marco.
+//
+// Móvil: menos trazadores, sin el fondo de red neuronal (lo más caro de
+// dibujar) y escala ×1.8 para el ave.
 (function () {
   'use strict';
   var H = (window.__HERO__ = window.__HERO__ || {});
@@ -40,14 +43,11 @@
     this.canvas.width = Math.max(1, Math.round(this.W * dpr));
     this.canvas.height = Math.max(1, Math.round(this.H2 * dpr));
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // el mundo (100×40) cabe entero en el escenario; el suelo queda 8 px por
+    // encima del borde inferior para que el ave tenga "suelo" visible
     this.S = Math.min(this.W / 104, this.H2 / 46);
     this.OX = (this.W - 100 * this.S) / 2;
-    // En móvil el HUD fijo tapa el borde inferior del canvas: sube el suelo
-    // por encima de él o el ave (que vive junto al suelo) nunca se ve.
-    var hud = document.getElementById('hud');
-    var hudH = (this.cfg.light && hud) ? hud.getBoundingClientRect().height : 0;
-    this.GY = this.H2 - 7 * this.S - hudH - (hudH ? 16 : 0);
-    if (this.GY < this.H2 * 0.5) this.GY = this.H2 * 0.5;
+    this.GY = this.H2 - 8;
   };
 
   Renderer.prototype.wx = function (x) { return this.OX + x * this.S; };
@@ -104,91 +104,7 @@
     }
   };
 
-  Renderer.prototype.drawWorld = function (ev, tgt, now, trail) {
-    var ctx = this.ctx, b = ev.bird;
-    // el ave se dibuja con su propia escala: en móvil (light) ×1.8 y nunca
-    // por debajo de 9 px, o es una mancha invisible sobre el fondo liso
-    var s = Math.max(9, this.S * (this.cfg.light ? 1.8 : 1));
-    var st = H.STAGES[ev.stage];
-
-    // suelo
-    var ga = ev.stage === 2 ? 0.12 : 0.4;
-    ctx.strokeStyle = 'rgba(89,215,255,' + ga + ')';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, this.GY); ctx.lineTo(this.W, this.GY); ctx.stroke();
-
-    // objetivo
-    var gx = this.wx(tgt[0]), gy = this.wy(tgt[1]);
-    var pulse = 4 + Math.sin(now * 0.006) * 1.5;
-    ctx.fillStyle = 'rgba(255,199,89,0.9)';
-    ctx.beginPath(); ctx.arc(gx, gy, pulse * 0.5, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,199,89,0.35)';
-    ctx.beginPath(); ctx.arc(gx, gy, pulse * 1.6, 0, Math.PI * 2); ctx.stroke();
-
-    // estela del ave
-    if (trail.length > 2) {
-      ctx.strokeStyle = 'rgba(255,91,115,0.25)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(this.wx(trail[0][0]), this.wy(trail[0][1]));
-      for (var i = 1; i < trail.length; i++) ctx.lineTo(this.wx(trail[i][0]), this.wy(trail[i][1]));
-      ctx.stroke();
-    }
-
-    var bx = this.wx(b.x), by = this.wy(b.y + 0.55);
-    var dir = b.vx >= 0 ? 1 : -1;
-    var tilt = Math.max(-0.5, Math.min(0.5, b.vy * 0.04)) * dir;
-
-    // patas
-    var hipX = bx - dir * s * 0.15, hipY = by + s * 0.25;
-    var legs = [[b.legL, 0.55], [b.legR, -0.35]];
-    for (var li = 0; li < 2; li++) {
-      var a = legs[li][0], o2 = legs[li][1];
-      var kx = hipX + dir * Math.sin(a) * s * 0.5, ky = hipY + s * 0.45;
-      var fx = hipX + dir * Math.sin(a) * s * 0.9 + dir * o2 * s * 0.2;
-      var fy = Math.min(this.GY, hipY + s * 0.95);
-      ctx.strokeStyle = 'rgba(255,160,120,0.85)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(hipX, hipY); ctx.lineTo(kx, ky); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(fx, fy); ctx.stroke();
-    }
-
-    // cuerpo + cola + alas + cabeza
-    ctx.save();
-    ctx.translate(bx, by); ctx.rotate(-tilt);
-    ctx.fillStyle = '#ff5b73';
-    ctx.beginPath(); ctx.ellipse(0, 0, s * 0.75, s * 0.42, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,91,115,0.8)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(-dir * s * 0.7, 0);
-    ctx.quadraticCurveTo(-dir * s * 1.2, -s * 0.1 + Math.sin(now * 0.008) * s * 0.15, -dir * s * 1.5, -s * 0.25);
-    ctx.stroke();
-    // alas: el ángulo real de aleteo (b.wingL/R) las mueve — lo que siente el
-    // aire es exactamente lo que se ve
-    var wa = (b.wingL + b.wingR) * 0.5;
-    ctx.fillStyle = 'rgba(89,215,255,0.8)';
-    ctx.beginPath();
-    ctx.moveTo(-dir * s * 0.1, -s * 0.15);
-    ctx.quadraticCurveTo(dir * s * 0.1, -s * (0.9 + wa), dir * s * 0.75, -s * (0.5 + wa * 0.8));
-    ctx.quadraticCurveTo(dir * s * 0.35, -s * 0.1, -dir * s * 0.1, -s * 0.15);
-    ctx.fill();
-    var hx = dir * s * 0.78, hy = -s * 0.3;
-    ctx.fillStyle = '#ff7d90';
-    ctx.beginPath(); ctx.arc(hx, hy, s * 0.28, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,199,89,0.95)';
-    ctx.beginPath();
-    ctx.moveTo(hx + dir * s * 0.2, hy - s * 0.06);
-    ctx.lineTo(hx + dir * s * 0.62, hy + s * 0.05);
-    ctx.lineTo(hx + dir * s * 0.2, hy + s * 0.14);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#0a0d18';
-    ctx.beginPath(); ctx.arc(hx + dir * s * 0.09, hy - s * 0.05, Math.max(1.2, s * 0.05), 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-
-    // destello de salto
-    if (!b.grounded && b.wingLv > 0.5) {
-      ctx.fillStyle = 'rgba(255,199,89,0.25)';
-      ctx.beginPath(); ctx.arc(hipX, this.GY, 4, 0, Math.PI * 2); ctx.fill();
-    }
-  };
-
+  // drawWorld y drawBird los sobrescribe 50-boot.js con los campos nuevos del
+  // ave (th, be, pL, pR) y las unidades del mundo reales.
   H.Renderer = Renderer;
 })();
