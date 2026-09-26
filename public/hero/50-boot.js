@@ -131,7 +131,7 @@
       else ctx.arc(bx, by, 3 * u, 0, 6.283);
       ctx.stroke();
     }
-  };
+
     if (this.rewardFlashT > 0) {
       ctx.strokeStyle = 'rgba(255,199,89,' + (0.25 + 0.5 * this.rewardFlashT).toFixed(3) + ')';
       ctx.lineWidth = 2;
@@ -140,6 +140,7 @@
       else ctx.arc(bx, by, 4.5 * u, 0, 6.283);
       ctx.stroke();
     }
+  };
 
   // ---------- arranque ----------
   H.boot = function () {
