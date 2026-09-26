@@ -2,7 +2,7 @@
 //
 // TOKENS (5):
 //   t0 objetivo       [dx, dy, dist]
-//   t1 cuerpo         [x, y, vx, vy, enSuelo, sinφ, cosφ, sinφL]
+//   t1 cuerpo         [x, y, vx, vy, enSuelo, sinφ, cosφ, sinφL, cosφL]
 //   t2 viento en alas [ux, uy, |u_rel|, velocidad de punta]  ← solo el transformer
 //   t3 pata izquierda [ángulo, velocidad, sinφL, contacto]
 //   t4 pata derecha   [ángulo, velocidad, cosφL, contacto]
@@ -36,7 +36,7 @@
   var HEADS = 2;
   var DH = D / HEADS; // 8
   var DF = 32;
-  var TOK = [3, 8, 4, 4, 4];
+  var TOK = [3, 9, 4, 4, 4];
   var NT = TOK.length;
   var NOUT = 12;
 
@@ -125,8 +125,8 @@
     for (h = 0; h < HEADS; h++) {
       var hb = h * DH;
       for (t = 0; t < NT; t++) {
+        var xb3 = t * D;
         var maxS = -1e9;
-        var scores = this.f; // no: scores necesita NT — usa pila local
         var sc = [];
         for (t2 = 0; t2 < NT; t2++) {
           s = 0;
@@ -144,12 +144,12 @@
     }
     // Wo + residual + LayerNorm
     for (t = 0; t < NT; t++) {
-      var xb3 = t * D;
+      var xb3b = t * D;
       for (d = 0; d < D; d++) {
-        s = 0; for (i = 0; i < D; i++) s += att[xb3 + i] * g[off.Wo + i * D + d];
-        a[xb3 + d] = x[xb3 + d] + s;
+        s = 0; for (i = 0; i < D; i++) s += att[xb3b + i] * g[off.Wo + i * D + d];
+        a[xb3b + d] = x[xb3b + d] + s;
       }
-      layerNorm(x, a, xb3, g.subarray(off.ln1g, off.ln1g + D), g.subarray(off.ln1b, off.ln1b + D));
+      layerNorm(x, a, xb3b, g.subarray(off.ln1g, off.ln1g + D), g.subarray(off.ln1b, off.ln1b + D));
     }
 
     // 3) FFN por token: ReLU(xW₁+b₁)W₂+b₂ + residual + LayerNorm
