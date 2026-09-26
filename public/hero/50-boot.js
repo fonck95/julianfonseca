@@ -64,7 +64,6 @@
     var dir = b.vx >= -2 ? 1 : -1;
     var G = H.G_WORLD || 981;
     var Lpx = 7 * u * 0.95; // semienvergadura: 7 cm del mundo
-    var self = this;
 
     function wing(th, be, alpha) {
       var tipx = bx + dir * Math.cos(th) * Lpx;
@@ -123,7 +122,7 @@
     ctx.fillStyle = '#0a0d18';
     ctx.beginPath(); ctx.arc(hx + dir * 0.3 * u, hy - 0.2 * u, Math.max(1, u * 0.16), 0, 6.283); ctx.fill();
 
-    // halo cuando la sustentación Aguanta al ave
+    // halo cuando la sustentación aguanta al ave
     if (!b.grounded && b.lift > G * 0.5) {
       ctx.strokeStyle = 'rgba(255,199,89,' + (0.08 + 0.14 * Math.min(1, b.lift / G)).toFixed(3) + ')';
       ctx.lineWidth = 1;
@@ -165,14 +164,14 @@
     var liftEl = document.getElementById('hud-lift');
     var curveEl = document.getElementById('hud-curve');
     var goalEl = document.getElementById('hud-goal');
-    var dotEl = document.getElementById('hud-dot');
+    var dotEl = document.querySelector('.lab-dot');
     var stagesEl = document.getElementById('hud-stages');
     var resetBtn = document.getElementById('hud-reset');
     var items = stagesEl ? stagesEl.querySelectorAll('li') : [];
 
     var MSGS = [
-      'aprendiendo a caminar: las patas aún tropiezan',
-      'caminar dominado — ahora aprende a saltar',
+      'aprendiendo a caminar: persigue la zanahoria, las patas aún tropiezan',
+      'caminar dominado — ahora aprende a saltar y a caer bien',
       'el salto ya sale — a por las alas, contra el viento',
       'las tres etapas dominadas — el ave te sigue a ti'
     ];
@@ -211,7 +210,14 @@
       manual = [x, y];
       manualUntil = nowT + 2600;
     }
-    canvas.addEventListener('pointerdown', onPointer);
+    canvas.addEventListener('pointerdown', function (e) {
+      // captura del puntero: el arrastre sigue llegando aunque el dedo salga
+      // del canvas (en móvil, sin captura, el gesto se pierde al borde)
+      if (e.pointerId !== undefined && canvas.setPointerCapture) {
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+      }
+      onPointer(e);
+    });
     canvas.addEventListener('pointermove', function (e) {
       if (e.pointerType === 'mouse' && e.buttons === 0 && manual === null) return;
       onPointer(e);
@@ -249,7 +255,6 @@
       if (hudMsg) {
         hudMsg.textContent = ev.mastered[2] ? MSGS[3] : MSGS[ev.stage];
       }
-      if (dotEl) dotEl.className = 'hud-dot' + (ev.improved ? ' on' : '');
     }
 
     document.addEventListener('visibilitychange', function () {
