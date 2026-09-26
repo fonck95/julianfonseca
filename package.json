@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "test:engine": "node --test test/",
+    "test:smoke": "node test/smoke.mjs"
   },
   "engines": {
     "node": ">=20"
