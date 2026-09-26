@@ -311,12 +311,29 @@
   };
 
   Evolver.prototype.step = function (budgetEvals) {
-    var sigma = Math.max(0.05, 0.35 * Math.pow(0.9995, this.evals));
+    // (1+8)-ES: élites + padre sesgado por rango + reinicio por estancamiento.
+    var focused = this.focusUntil > this.evals;
+    var sigma = focused ? 0.12 : Math.max(0.05, 0.35 * Math.pow(0.9995, this.evals));
     for (var k = 0; k < budgetEvals; k++) {
-      var cand = this.champ.clone().mutate(sigma, 0.09);
+      var parent = this.champ;
+      if (this.elites.length >= 4 && Math.random() < 0.5) {
+        parent = this.elites[(Math.random() * Math.min(4, this.elites.length)) | 0].pol;
+      }
+      var cand = parent.clone().mutate(sigma, 0.09);
       var fit = this.evaluate(cand, this.stage);
-      this.evals++; this.stageEvals++; this.inGen++;
-      if (fit > this.best) { this.champ = cand; this.best = fit; this.improved = true; }
+      this.evals++; this.stageEvals++; this.inGen++; this.sinceImp++;
+      if (fit > this.best) { this.champ = cand; this.best = fit; this.improved = true; this.sinceImp = 0; }
+      this.elites.push({ pol: cand, fit: fit });
+      this.elites.sort(function (a, b) { return b.fit - a.fit; });
+      if (this.elites.length > 8) this.elites.length = 8;
+      if (this.sinceImp > 600) {
+        this.sinceImp = 0;
+        for (var e = 1; e < this.elites.length; e++) {
+          this.elites[e].pol = this.elites[e].pol.clone().mutate(0.5, 0.3);
+          this.elites[e].fit = this.evaluate(this.elites[e].pol, this.stage);
+        }
+        this.elites.sort(function (a, b) { return b.fit - a.fit; });
+      }
       if (this.inGen >= 24) {
         this.inGen = 0;
         this.history.push(this.best);
