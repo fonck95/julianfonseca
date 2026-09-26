@@ -200,9 +200,9 @@
   Fluid.prototype.sample = function (x, y, out) {
     var gx = x * this.ax + 0.5, gy = y * this.ay + 0.5;
     var nx = this.nx, ny = this.ny;
+    gx = Math.max(1, Math.min(nx - 2.001, gx));
+    gy = Math.max(1, Math.min(ny - 2.001, gy));
     var i0 = Math.floor(gx), j0 = Math.floor(gy);
-    if (i0 < 0) i0 = 0; if (j0 < 0) j0 = 0;
-    if (i0 > nx - 2) i0 = nx - 2; if (j0 > ny - 2) j0 = ny - 2;
     var s = gx - i0, t = gy - j0, a = i0 + j0 * nx, b = a + nx;
     out = out || [0, 0];
     out[0] = (1 - s) * ((1 - t) * this.u[a] + t * this.u[b]) + s * ((1 - t) * this.u[a + 1] + t * this.u[b + 1]);
