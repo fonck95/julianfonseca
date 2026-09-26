@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build (Astro, base raíz — misma variante que sirve el smoke)
+        run: |
+          npm install
+          RAILWAY_ENVIRONMENT=production npm run build
+      - name: Tests del motor (código real, semilla fija)
+        run: npm run test:engine
+      - name: Smoke en navegador (escritorio + móvil)
+        run: |
+          npm install playwright@latest
+          npx playwright install chromium --with-deps
+          npm run test:smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-screenshots
+          path: smoke-*.png
