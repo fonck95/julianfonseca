@@ -35,7 +35,10 @@
     // = 0.15 unidades²/s: el valor físico del aire a esta escala.
     this.nu = opt.nu === undefined ? 0.15 : opt.nu;
     this.decay = opt.decay === undefined ? 0.3 : opt.decay;
-    this.maxSpeed = opt.maxSpeed || 120;
+    // Techo de velocidad: el viento ambiente llega a ~340 u/s (3.4 m/s) y las
+    // ráfagas del gesto a más. Con el viejo 120 todo se recortaba y el viento
+    // no se notaba en las alas.
+    this.maxSpeed = opt.maxSpeed || H.FLUID_MAX_SPEED || 400;
     // windK: a qué velocidad se relaja el campo hacia el viento ambiente.
     // Bajo (0.5) para que las estelas del aleteo duren varios frames.
     this.windK = opt.windK === undefined ? 0.5 : opt.windK;
@@ -98,12 +101,8 @@
     this.linSolve(b, x, x0, ta, tb, 1 + 2 * (ta + tb), this.itersD);
   };
 
-  // Proyección de presión. Resuelve el problema de Poisson
-  //     ∇²p = ∇·u*        (u* = velocidad antes de proyectar)
-  // y corrige
-  //     u = u* − ∇p
-  // Con eso ∇·u = 0 (salvo error de truncamiento de Jacobi). El dt NO aparece:
-  // se trabaja con presión cinemática ya escalada por dt en la divergencia.
+  // Proyección de presión: resuelve  ∇²p = ∇·u*  y corrige  u = u* − ∇p.
+  // Con eso ∇·u = 0 (salvo el error de truncamiento de Jacobi).
   Fluid.prototype.project = function () {
     var nx = this.nx, ny = this.ny, u = this.u, v = this.v, p = this.p, div = this.div;
     var ax = this.ax, ay = this.ay, ax2 = this.ax2, ay2 = this.ay2;
@@ -111,19 +110,19 @@
     for (j = 1; j < ny - 1; j++) {
       idx = 1 + j * nx;
       for (i = 1; i < nx - 1; i++, idx++) {
-        // x0 de linSolve debe ser −∇·u* para resolver ∇²p = ∇·u* con el signo
-        // que usa linSolve (c·x = x0 + a·x_vecinos).
+        // x0 de linSolve es −∇·u* (linSolve resuelve c·x = x0 + a·vecinos):
         div[idx] = -0.5 * (ax * (u[idx + 1] - u[idx - 1]) + ay * (v[idx + nx] - v[idx - nx]));
         p[idx] = 0;
       }
     }
     this.setBnd(0, div); this.setBnd(0, p);
     this.linSolve(0, p, div, ax2, ay2, 2 * (ax2 + ay2), this.itersP);
+    // u −= ∇p con derivadas centrales: ∂p/∂x ≈ (p[i+1]−p[i−1])·ax/2
     for (j = 1; j < ny - 1; j++) {
       idx = 1 + j * nx;
       for (i = 1; i < nx - 1; i++, idx++) {
-        u[idx] -= 0.5 * (p[idx + 1] - p[idx - 1]) / this.sx * this.sx * ax;
-        v[idx] -= 0.5 * (p[idx + nx] - p[idx - nx]) / this.sy * this.sy * ay;
+        u[idx] -= 0.5 * ax * (p[idx + 1] - p[idx - 1]);
+        v[idx] -= 0.5 * ay * (p[idx + nx] - p[idx - nx]);
       }
     }
     this.setBnd(1, u); this.setBnd(2, v);
@@ -151,9 +150,9 @@
     this.setBnd(b, d);
   };
 
-  // El viento ambiente entra como término de fuerza f: el campo se relaja hacia
-  // W(t) con una tasa windK. Así las ráfagas viven DENTRO del campo resuelto y
-  // las alas las sienten igual que a la estela que ellas mismas generan.
+  // El viento ambiente entra como relajación del campo hacia W(t): las ráfagas
+  // viven DENTRO del campo resuelto y las alas las sienten igual que a la
+  // estela que ellas mismas generan.
   Fluid.prototype.applyWind = function (dt) {
     var u = this.u, v = this.v, w = this.wind, k = 1 - Math.exp(-this.windK * dt);
     var n = this.nx * this.ny, i;
