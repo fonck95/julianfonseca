@@ -1,12 +1,15 @@
 // 60-contact.js — capa de contacto de la escena visible: dibujo y colisión
-// usan el MISMO suelo. Parchea stepBird sin tocar la física interna (la
-// evolución entrena igual que antes):
-//   - STAND_H: la cadera reposa a la altura real de las patas (1.6 cm); antes
-//     se hundía en y=0 y el dibujo inventaba un offset flotante.
-//   - landFlash: señal de impacto al aterrizar (proporcional a |vy| de llegada)
-//     que consume el dibujo: la colisión se VE, no se imagina.
-//   - b.wx/b.wy: viento relativo que siente el ave, para que cuerpo y cabeza
-//     miren al viento como un ave real.
+// usan el MISMO suelo. Parchea stepBird sin tocar la física interna ni el
+// entrenamiento (evaluate usa substep directo):
+//   - STAND_H: la cadera reposa a la altura real de las patas (1.6 cm). Se
+//     hace TRASLADANDO la coordenada y que ve stepBird (y' = y - STAND_H):
+//     el suelo del solver sigue en 0, la marcha y el salto no cambian, y la
+//     cadera visible queda a la altura del dibujo. Levantar y a posteriori
+//     habría hecho «flotar» al ave y roto la cinemática de apoyo.
+//   - landFlash: señal de impacto al aterrizar (proporcional a |vy| real de
+//     llegada): la colisión se VE (destello + flexión de patas), no se inventa.
+//   - b.wx/b.wy: viento relativo que siente el ave, para que el dibujo la
+//     oriente contra el viento como un ave real.
 (function () {
   'use strict';
   var H = (window.__HERO__ = window.__HERO__ || {});
@@ -18,10 +21,10 @@
   H.stepBird = function (b, pol, tx, ty, fluid, react) {
     if (b.landFlash > 0) b.landFlash = Math.max(0, b.landFlash - H.DT * 2.5);
     var wasAir = !b.grounded, vy0 = b.vy;
+    // el solver ve el suelo en 0; el mundo visible lo ve en STAND_H
+    b.y -= STAND_H;
     var err = inner(b, pol, tx, ty, fluid, react);
-    // suelo visible = suelo físico: la cadera no baja de STAND_H en tierra
-    if (b.grounded && b.y < STAND_H) b.y = STAND_H;
-    // señal de impacto: venía del aire y aterrizó rápido
+    b.y += STAND_H;
     if (wasAir && b.grounded && vy0 < -20) {
       b.landFlash = H.clamp(-vy0 / 250, 0.35, 1);
     }
