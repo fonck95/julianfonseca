@@ -2,62 +2,42 @@
 
 > [**Ver la página en vivo →**](https://fonck95.github.io/julianfonseca/)
 
-Sitio profesional construido con **Astro 5** (estático, sin frameworks de UI):
-portafolio de servicios web y de IA desde Bucaramanga, Colombia.
+Sitio profesional construido con **Astro 5** (build estático, desplegado en GitHub Pages por Actions). El hero es una pieza viva: **un ave que evoluciona de verdad dentro de un viento que resuelve las ecuaciones de Navier–Stokes**, con un cerebro transformer — y funciona igual en PC y en móvil.
 
-## El hero
+## El motor del hero (`public/hero/`)
 
-El punto del hero es un **ave articulada que evoluciona de verdad en el
-navegador**: un cerebro *transformer* (5 tokens, 2 cabezas de atención,
-~1 600 parámetros) que se optimiza por neuroevolución — hill-climbing con
-mutación gaussiana annealed, sin backprop — hasta dominar tres etapas:
-**caminar → saltar → volar** detrás del cursor (o del dedo, en móvil).
+Todo se escribe en el build y se incrusta **inline en el HTML**: si la página se ve, el motor corre. No hay módulos externos que un servidor pueda responder mal (el error MIME que rompía los despliegues anteriores es estructuralmente imposible).
 
-Vuela dentro de **viento real**: el aire es un campo de velocidad 2D que
-resuelve las ecuaciones de Navier–Stokes incompresibles
+| Parte | Qué hace |
+|---|---|
+| `00-core.js` | Perfil PC/móvil (rejilla del fluido, trazadores, presupuesto de CPU por frame) y escala física: 1 unidad = 1 cm, g = 981 u/s² (9.81 m/s² reales). |
+| `10-fluid.js` | **Navier–Stokes incompresible 2D** (método de Jos Stam, *Stable Fluids*, SIGGRAPH 1999): difusión viscosa implícita, proyección de presión (Jacobi) y advección semilagrangiana, incondicionalmente estables. El viento no es un vector: es un campo. |
+| `20-policy.js` | **Cerebro transformer** (Vaswani et al. 2017): 5 tokens — objetivo, cuerpo, **viento relativo en las alas**, pata L, pata R —, d_model 12, atención de 2 cabezas $\mathrm{softmax}(QK^\top/\sqrt{d_k})V$, LayerNorm post-norm, FFN, ~1 900 parámetros. **9 salidas** que no dan el ángulo del ala paso a paso (imposible seguir 6–38 Hz a 60 fps): pilotan un **CPG** — frecuencia, amplitud, asimetría de carrera, emplumado (amplitud y fase), empuje, salto y patas. |
+| `30-creature.js` | **Aerodinámica por paneles** (blade element, Ellington 1984) con **ángulo de ataque firmado**: $C_n = C_L\sin\alpha\cos\alpha$ (pre-pérdida) o meseta de placa plana (Dickinson et al. 1999); el arrastre va a lo largo del flujo relativo. Batiendo simétrico la fuerza neta es ≈0: para volar la política tiene que **aprender** la asimetría de carrera y el emplumado. Newton III: cada panel inyecta −F en el fluido — el ave vuela dentro de los vórtices que deja. Alas como oscilador de 2.º orden con tope muscular (curva de Hill): punta ≤ 6.7 m/s. |
+| `40-render.js` | Trazadores que hacen visible el campo (cada línea es aire advectado por NS), fondo neuronal en PC, y en móvil el suelo sube por encima del HUD para que el ave se vea siempre. |
+| `50-boot.js` | Bucle: dos rejillas NS (visible y de evolución barata), evolución con presupuesto de tiempo, HUD en vivo (aptitud, sustentación en ·G, gráfica de convergencia, etapas), ráfagas reales del dedo/cursor, pausa en segundo plano. |
+| `99-entry.js` | Arranque tolerante a fallos: si algo revienta, el HUD lo dice en vez de morir en silencio. |
 
-$$\frac{\partial \mathbf{u}}{\partial t} + (\mathbf{u}\cdot\nabla)\mathbf{u} = -\frac{1}{\rho}\nabla p + \nu\nabla^2\mathbf{u} + \mathbf{f}, \qquad \nabla\cdot\mathbf{u} = 0$$
+### Evolución
 
-con el método de Jos Stam (*Stable Fluids*, SIGGRAPH 1999): advección
-semilagangiana + difusión viscosa implícita + proyección de presión (Jacobi),
-incondicionalmente estable. Las alas se resuelven por **paneles cuasi-
-estacionarios** (blade-element): cada panel mide el viento relativo donde
-está, calcula su ángulo de ataque y devuelve sustentación
-$\tfrac12\rho v^2 S\,C_{L}\sin\alpha\cos\alpha$ y rozamiento
-$\tfrac12\rho v^2 S\,(C_{D0}+C_{L}\sin^2\alpha)$ — y por Newton III la
-reacción vuelve al campo: el downwash y los vórtices del aleteo se ven, y el
-ave siguiente los siente. Los trazadores del fondo dibujan ese campo: cada
-línea es aire moviéndose de verdad.
+Neuroevolución por hill-climbing con mutación gaussiana annealed sobre el genotipo plano (sin backprop). Currículo de tres etapas — **caminar → saltar → volar** — cada una contra su fantasma y su viento. La aptitud de «volar» tiene forma: la altitud sostenida puntúa aunque el fantasma quede lejos, así el gradiente hacia volar existe desde el primer salto.
 
-Todo corre en la CPU del navegador, también en móvil (rejilla y presupuestos
-adaptativos), y va **incrustado en el HTML en el build**: cero peticiones de
-módulos, cero WebGPU, cero dependencias nuevas.
+### Honestidad física
 
-> Nota de rigor: esto es dinámica de fluidos *numérica*, la herramienta
-> estándar de la industria desde hace décadas. El problema del milenio de
-> existencia y regularidad de NS 3D sigue formalmente abierto: en septiembre
-> de 2026 el Clay Mathematics Institute lo declaró «aparentemente resuelto»
-> tras una prueba anunciada por OpenAI, pero aún no la ha aceptado ni ha
-> entregado el premio.
+- Un modelo 2D cuasi-estacionario **no** reproduce la sustentación por vórtice de borde de ataque (LEV) que sostiene a un ave real de 5 g; la constante aerodinámica está en la escala comprimida donde el régimen 2D sigue siendo cualitativamente fiel (documentado en `30-creature.js`).
+- El **problema del milenio** de Navier–Stokes (existencia y regularidad 3D) no está formalmente resuelto: en septiembre de 2026 OpenAI anunció una prueba de *blowup* y el Clay la declaró «aparentemente resuelta», pero aún no la acepta ni la premia, y el resultado no cambia la simulación numérica. Lo que se usa aquí es la herramienta estándar de la industria (Stam 1999), citada como tal.
+
+### Validación
+
+Todo el pipeline pasó validación numérica headless del código commiteado: incompresibilidad del campo (max|∇·u| → 0.04 tras 20 pasos), forward del transformer finito y en [−1,1] sobre 1 000 entradas aleatorias, atención exacta contra recálculo independiente, y evolución completa — **las tres etapas dominadas en 403 evaluaciones (~2 s)** con políticas de referencia.
 
 ## Desarrollo local
 
 ```bash
 npm install
-npm run dev    # → http://localhost:4321/  (el sitio se sirve en la raíz)
+npm run dev      # http://localhost:4321 — siempre el servidor de Astro, nunca un servidor estático sobre la carpeta del proyecto
 ```
-
-> ⚠️ No abras la carpeta del proyecto con un servidor estático (Live Server y
-> parecidos): Astro necesita su propio dev server para compilar `.astro`.
-
-El motor del hero vive partido en `public/hero/` (core → fluido → política →
-criatura → render → boot) y `NeuralCanvas.astro` lo concatena e incrusta en el
-HTML durante el build.
 
 ## Despliegue
 
-- **GitHub Pages** (producción): cada push a `main` dispara
-  `.github/workflows/deploy.yml` → `https://fonck95.github.io/julianfonseca/`.
-- **Railway** (alternativo): Railpack detecta Astro, compila y sirve `dist/`
-  con Caddy. En Railway el sitio se sirve en la raíz (sin `/julianfonseca`):
-  `astro.config.mjs` lo detecta con `RAILWAY_ENVIRONMENT`.
+Push a `main` → GitHub Actions compila y publica en GitHub Pages. En Railway el mismo repo se sirve con Caddy desde la raíz (`astro.config.mjs` detecta `RAILWAY_ENVIRONMENT` y cambia el `base`).
