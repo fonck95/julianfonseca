@@ -77,6 +77,8 @@
   var SP = (L / NP) * CH;       // área de panel (cm²)
   var SB = 3;                   // área del cuerpo (arrastre parásito)
   var CD0 = 0.35, CDB = 1.0, CL = 2.0, CDP = 2.0;
+  var CAM = 0.13;   // combadura pasiva del perfil: sustentación incluso con AoA 0
+  var KCP = 0.40;   // pronación pasiva acoplada a la velocidad de batido
 
   // actuadores
   var AK = 22500, AC = 45;      // ala: ω=150 rad/s, ζ=0.15
@@ -138,7 +140,8 @@
       // --- aerodinámica por paneles, AoA FIRMADO ---
       for (var wing = 0; wing < 2; wing++) {
         var sg = wing ? -1 : 1;
-        var thW = b.th * sg, beW = b.be * sg;
+        var thW = b.th * sg;
+        var beW = (b.be - KCP * b.thv / THVMAX) * sg;
         var ct = Math.cos(thW), st = Math.sin(thW);
         var psi = thW + beW, cp = Math.cos(psi), sp = Math.sin(psi);
         for (var i = 0; i < NP; i++) {
@@ -150,7 +153,7 @@
           var ux = rx / V, uy = ry / V;
           var sa = cp * uy - sp * ux;                 // sinα FIRMADO (ĉ × û)
           var ca = cp * ux + sp * uy;                 // cosα FIRMADO (ĉ · û)
-          var cn = Math.abs(sa) < 0.707 ? CL * sa * ca : CDP * sa * Math.abs(sa);
+          var cn = Math.abs(sa) < 0.707 ? CL * (sa * ca + CAM * ca * ca) : CDP * sa * Math.abs(sa) + CL * CAM * ca * ca;
           var cd = CD0 + CL * sa * sa;
           var q = QS * V * V * SP;
           var fx = q * (cn * (-sp) + cd * ux);
@@ -249,7 +252,7 @@
       spawn: function (b) { b.x = 50; b.y = 0; b.vx = 0; b.vy = 0; b.grounded = true; } },
     { name: 'volar', secs: 4.0, goal: 0.32, sigma: 12,
       ghost: function (t) { return [50 + 22 * Math.sin(t * 0.45), 14 + 8 * Math.sin(t * 0.8 + 1)]; },
-      wind: function (t) { return [150 * Math.sin(t * 0.4), 40 * Math.sin(t * 0.23 + 2)]; },
+      wind: function (t) { return [125 + 65 * Math.sin(t * 0.4), 40 * Math.sin(t * 0.23 + 2)]; },
       spawn: function (b) { b.x = 50; b.y = 14; b.vx = 0; b.vy = 0; b.grounded = false; } }
   ];
 
