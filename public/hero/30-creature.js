@@ -272,7 +272,7 @@
       for (var s = 0; s < SUBE; s++) substep(b, o, null, wx, wy, HE, false);
       if (!isFinite(b.x) || !isFinite(b.y) || !isFinite(b.th)) return 0;
       if (!b.grounded) airFrames++;
-      if (wasG && !b.grounded === false && wasG !== b.grounded) landings++;
+      if (!wasG && b.grounded) landings++;   // aterrizaje = estaba en aire y tocó suelo
       wasG = b.grounded;
       if (t > 1.0 && b.grounded) lateTouch = true;
       sum += Math.exp(-Math.hypot(g[0] - b.x, g[1] - b.y) / st.sigma);
