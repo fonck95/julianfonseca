@@ -77,6 +77,8 @@
   var SP = (L / NP) * CH;       // área de panel (cm²)
   var SB = 3;                   // área del cuerpo (arrastre parásito)
   var CD0 = 0.35, CDB = 1.0, CL = 2.0, CDP = 2.0;
+  var CAM = 0.13;   // combadura pasiva del perfil: sustentación incluso con AoA 0
+  var KCP = 0.40;   // pronación pasiva acoplada a la velocidad de batido
 
   // actuadores
   var AK = 22500, AC = 45;      // ala: ω=150 rad/s, ζ=0.15
@@ -138,7 +140,8 @@
       // --- aerodinámica por paneles, AoA FIRMADO ---
       for (var wing = 0; wing < 2; wing++) {
         var sg = wing ? -1 : 1;
-        var thW = b.th * sg, beW = b.be * sg;
+        var thW = b.th * sg;
+        var beW = (b.be - KCP * b.thv / THVMAX) * sg;
         var ct = Math.cos(thW), st = Math.sin(thW);
         var psi = thW + beW, cp = Math.cos(psi), sp = Math.sin(psi);
         for (var i = 0; i < NP; i++) {
@@ -150,7 +153,7 @@
           var ux = rx / V, uy = ry / V;
           var sa = cp * uy - sp * ux;                 // sinα FIRMADO (ĉ × û)
           var ca = cp * ux + sp * uy;                 // cosα FIRMADO (ĉ · û)
-          var cn = Math.abs(sa) < 0.707 ? CL * sa * ca : CDP * sa * Math.abs(sa);
+          var cn = Math.abs(sa) < 0.707 ? CL * (sa * ca + CAM * ca * ca) : CDP * sa * Math.abs(sa) + CL * CAM * ca * ca;
           var cd = CD0 + CL * sa * sa;
           var q = QS * V * V * SP;
           var fx = q * (cn * (-sp) + cd * ux);
@@ -249,7 +252,7 @@
       spawn: function (b) { b.x = 50; b.y = 0; b.vx = 0; b.vy = 0; b.grounded = true; } },
     { name: 'volar', secs: 4.0, goal: 0.32, sigma: 12,
       ghost: function (t) { return [50 + 22 * Math.sin(t * 0.45), 14 + 8 * Math.sin(t * 0.8 + 1)]; },
-      wind: function (t) { return [150 * Math.sin(t * 0.4), 40 * Math.sin(t * 0.23 + 2)]; },
+      wind: function (t) { return [125 + 65 * Math.sin(t * 0.4), 40 * Math.sin(t * 0.23 + 2)]; },
       spawn: function (b) { b.x = 50; b.y = 14; b.vx = 0; b.vy = 0; b.grounded = false; } }
   ];
 
@@ -308,12 +311,29 @@
   };
 
   Evolver.prototype.step = function (budgetEvals) {
-    var sigma = Math.max(0.05, 0.35 * Math.pow(0.9995, this.evals));
+    // (1+8)-ES: élites + padre sesgado por rango + reinicio por estancamiento.
+    var focused = this.focusUntil > this.evals;
+    var sigma = focused ? 0.12 : Math.max(0.05, 0.35 * Math.pow(0.9995, this.evals));
     for (var k = 0; k < budgetEvals; k++) {
-      var cand = this.champ.clone().mutate(sigma, 0.09);
+      var parent = this.champ;
+      if (this.elites.length >= 4 && Math.random() < 0.5) {
+        parent = this.elites[(Math.random() * Math.min(4, this.elites.length)) | 0].pol;
+      }
+      var cand = parent.clone().mutate(sigma, 0.09);
       var fit = this.evaluate(cand, this.stage);
-      this.evals++; this.stageEvals++; this.inGen++;
-      if (fit > this.best) { this.champ = cand; this.best = fit; this.improved = true; }
+      this.evals++; this.stageEvals++; this.inGen++; this.sinceImp++;
+      if (fit > this.best) { this.champ = cand; this.best = fit; this.improved = true; this.sinceImp = 0; }
+      this.elites.push({ pol: cand, fit: fit });
+      this.elites.sort(function (a, b) { return b.fit - a.fit; });
+      if (this.elites.length > 8) this.elites.length = 8;
+      if (this.sinceImp > 600) {
+        this.sinceImp = 0;
+        for (var e = 1; e < this.elites.length; e++) {
+          this.elites[e].pol = this.elites[e].pol.clone().mutate(0.5, 0.3);
+          this.elites[e].fit = this.evaluate(this.elites[e].pol, this.stage);
+        }
+        this.elites.sort(function (a, b) { return b.fit - a.fit; });
+      }
       if (this.inGen >= 24) {
         this.inGen = 0;
         this.history.push(this.best);
@@ -340,6 +360,8 @@
     this.pinT = 0;
   };
 
+  Evolver.prototype.reward = function () { this.rewards++; this.focusUntil = this.evals + 300; };
+
   Evolver.prototype.reset = function () {
     this.champ = H.Policy.random();
     this.stage = 0; this.stageEvals = 0; this.inGen = 0; this.evals = 0;
@@ -347,6 +369,7 @@
     this.improved = false;
     this.mastered = [false, false, false];
     this.history = [];
+    this.elites = []; this.sinceImp = 0; this.focusUntil = 0; this.rewards = 0;
     this.bird = new Bird(50);
     this.pinT = 0;
     if (this.fev) this.fev.reset();

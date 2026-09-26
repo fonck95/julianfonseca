@@ -49,6 +49,10 @@ if (/<\/script/i.test(heroJs)) {
           crean ráfagas.
         </p>
       </div>
+      <div class="lab-reward-wrap">
+        <button class="lab-reward" id="hud-reward" type="button" title="Premia lo que acabas de ver: la búsqueda se enfoca alrededor del campeón actual">Recompensar</button>
+        <span class="lab-reward-count" id="hud-rewards">0</span>
+      </div>
       <button class="lab-reset" id="hud-reset" type="button">Reiniciar</button>
     </header>
 
@@ -114,8 +118,15 @@ if (/<\/script/i.test(heroJs)) {
   }
   .lab-sub { margin: 3px 0 0; font-size: 0.76rem; line-height: 1.5; color: var(--muted); max-width: 72ch; }
   .lab-sub strong { color: var(--text); font-weight: 600; }
+  .lab-reward-wrap { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .lab-reward { font: inherit; font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; color: #0a0d18; background: linear-gradient(95deg, var(--gold), #ffd98a); border: 0; border-radius: 9px; padding: 9px 14px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+  .lab-reward:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(255, 199, 89, 0.35); }
+  .lab-reward:active { transform: scale(0.96); }
+  .lab-reward.pulse { animation: rewardPulse 0.5s ease; }
+  @keyframes rewardPulse { 0% { box-shadow: 0 0 0 0 rgba(255,199,89,.6); } 100% { box-shadow: 0 0 0 18px rgba(255,199,89,0); } }
+  .lab-reward-count { min-width: 22px; text-align: center; font-size: 0.7rem; font-weight: 700; color: var(--gold); font-variant-numeric: tabular-nums; }
   .lab-reset {
-    margin-left: auto; flex-shrink: 0;
+    flex-shrink: 0;
     font: inherit; font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--muted); background: transparent;
     border: 1px solid var(--line); border-radius: 9px;
